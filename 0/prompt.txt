@@ -1,0 +1,55 @@
+Now he got a message
+
+---
+
+pushe in to main please this branch
+
+---
+
+CallMeBot API \*Activated\* for REDACTED
+Your apikey is: \*REDACTED\*
+You can now send messages using the API.
+[https://api.callmebot.com/whatsapp.php?phone=REDACTED&text=This+is+a+test&apikey=REDACTED](https://api.callmebot.com/whatsapp.php?phone=REDACTED\&text=This+is+a+test\&apikey=REDACTED)
+Send \*Stop\* to pause the Bot.
+Send \*Resume\* to enable it again.
+If you want to receive \*outage notifications\*, click the link below:
+[https://api.callmebot.com/emails/subscribe.php?hash=REDACTED](https://api.callmebot.com/emails/subscribe.php?hash=REDACTED)
+
+
+i changed the the callmebot because i think i have problem there thats why i changed that
+
+---
+
+\
+**CallMeBot WhatsApp · error**
+Tier 75 WhatsApp alert not confirmed. HTTP 403. Check guardian activation and the matching API key. No automatic retry; check with your contact.
+
+
+CallMeBot API \*Activated\* for REDACTED
+Your apikey is: \*REDACTED\*
+You can now send messages using the API.
+[https://api.callmebot.com/whatsapp.php?phone=REDACTED&text=This+is+a+test&apikey=REDACTED](https://api.callmebot.com/whatsapp.php?phone=REDACTED\&text=This+is+a+test\&apikey=REDACTED)
+Send \*Stop\* to pause the Bot.
+Send \*Resume\* to enable it again.
+If you want to receive \*outage notifications\*, click the link below:
+[https://api.callmebot.com/emails/subscribe.php?hash=REDACTED](https://api.callmebot.com/emails/subscribe.php?hash=REDACTED)
+
+Why doesn't the whole chat thing work anymore? Why doesn't it work? Last time it worked, and now it doesn't work. I now have a new call-me bot from my other friend with a new number. Can you please check and verify what the problem is? I don't see why it takes so much, because I always have this error, and I don't understand why I get this error. Last time it worked perfectly, and now it doesn't work. Check out what we changed so that it doesn't work anymore.
+
+---
+
+<send_user_message_question_reply>
+[{"questionItemId":"[\"request_user_input_async\",\"call_d6103b6daab74238892fd964025b2472\",0]","question":"May I send up to two clearly marked test messages to the new guardian ending 9252: a short connection test and an alert-format test using fictional data? This will distinguish a number/key failure from a message-format failure. AGENTS.md requires separate approval for real test sends; the earlier approval covered only the old number.","answer":"Yes, run both tests"}]
+</send_user_message_question_reply>
+
+---
+
+<send_user_message_question_reply>
+[{"questionItemId":"[\"request_user_input_async\",\"call_adbdd3a3d7384356a09cac970cbeb7c3\",0]","question":"May I send one final message to the guardian ending 9252 using the corrected format? It will start “TEST ONLY — FICTIONAL DATA — NO ACTION NEEDED” and contain a fictional Red alert. This checks whether CallMeBot accepts the fix; the two previously approved sends are used.","answer":"Yes, send the final test"}]
+</send_user_message_question_reply>
+
+---
+
+<send_user_message_question_reply>
+[{"questionItemId":"[\"request_user_input_async\",\"call_1a95484ef64f4f3eb335dad0698fb2be\",0]","question":"Did the guardian receive the latest message starting “TEST ONLY — FICTIONAL DATA — NO ACTION NEEDED” with the fictional Red alert? CallMeBot confirmed it was queued.","answer":"Not yet"}]
+</send_user_message_question_reply>
