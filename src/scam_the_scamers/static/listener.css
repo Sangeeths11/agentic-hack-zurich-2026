@@ -806,3 +806,31 @@ footer > span:last-child {
     transition: none !important;
   }
 }
+
+.call-settings { margin: 12px 0 20px; text-align: left; }
+.call-settings label { font-size: 12px; font-weight: 600; }
+.call-settings label span { font-weight: 400; }
+.call-settings input { display: block; width: 100%; margin-top: 8px; padding: 11px; border: 1px solid #cbd5c4; border-radius: 8px; background: #fff; color: #243c2e; font: inherit; }
+.call-settings p, .rubric-note, .risk-panel details { font-size: 11px; line-height: 1.6; color: #52644e; overflow-wrap: anywhere; }
+#fallback-status { border-left: 3px solid #94a779; padding-left: 10px; }
+.risk-panel { padding: 16px; margin-bottom: 22px; border: 1px solid #d5ddcf; border-radius: 12px; background: #f6f7f1; }
+.risk-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.risk-heading span { font-size: 10px; letter-spacing: .6px; }
+#overall-score { display: block; font-size: 30px; margin-top: 8px; font-weight: 600; }
+#risk-level { border-radius: 20px; padding: 6px 8px; font-size: 10px; }
+#assessment-status { font-size: 11px; line-height: 1.6; }
+.criterion { display: flex; justify-content: space-between; align-items: center; gap: 10px; border-bottom: 1px solid #dce2d5; padding: 9px 0; font-size: 11px; }
+.criterion strong { border-radius: 5px; padding: 4px 8px; white-space: nowrap; }
+[data-risk="green"] > strong, [data-risk="green"] #risk-level { color: #194b31; background: #dceedd; }
+[data-risk="amber"] > strong, [data-risk="amber"] #risk-level { color: #774407; background: #ffe7ad; }
+[data-risk="red"] > strong, [data-risk="red"] #risk-level { color: #a32922; background: #ffe0d9; }
+[data-risk="critical"] > strong, [data-risk="critical"] #risk-level { color: #fff; background: #861b34; }
+.risk-panel[data-risk="critical"] { border-color: #861b34; }
+.risk-panel[data-risk="red"] { border-color: #bf5b4e; }
+.risk-panel[data-risk="amber"] { border-color: #c29736; }
+.tool-statuses { margin: 0; }
+.tool-statuses > div { display: flex; justify-content: space-between; gap: 12px; font-size: 11px; padding: 8px 0; }
+.tool-statuses dd { margin: 0; text-align: right; color: #65745d; }
+.tool-statuses dd[data-status="error"] { color: #a32922; }
+#warning-text { font-size: 13px; padding: 12px; background: #fff0ca; border-radius: 8px; }
+@media (max-width: 420px) { .settings { flex-wrap: wrap; } .risk-heading { align-items: start; } }

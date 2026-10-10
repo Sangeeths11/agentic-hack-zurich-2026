@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
-from .agent import AgentFactory, GradbotFactory
+from .agent import AgentFactory, ScreeningFactory
 from .bridge import SessionRegistry, handle_stream
 from .config import Settings
 
@@ -19,8 +19,10 @@ STATIC = Path(__file__).with_name("static")
 
 def create_app(settings: Settings | None = None, factory: AgentFactory | None = None) -> FastAPI:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    for name in ("httpx", "httpcore", "websockets"):
+        logging.getLogger(name).setLevel(logging.WARNING)
     settings = settings if settings is not None else Settings()
-    factory = factory if factory is not None else GradbotFactory(settings)
+    factory = factory if factory is not None else ScreeningFactory(settings)
     registry = SessionRegistry(settings.max_concurrent_sessions)
 
     @asynccontextmanager
@@ -61,12 +63,20 @@ def create_app(settings: Settings | None = None, factory: AgentFactory | None = 
 
     @app.get("/api/config")
     async def config():
-        return {
-            "configured": not settings.missing(),
-            "missing": settings.missing(),
-            "operator": settings.operator_name,
-            "max_session_seconds": settings.max_session_seconds,
-        }
+        return JSONResponse(
+            {
+                "configured": not settings.missing(),
+                "missing": settings.missing(),
+                "warning_threshold": settings.warning_threshold,
+                "email_status": settings.email_status(),
+                "fallback_email": settings.value("fallback_email")
+                if settings.email_status() == "configured"
+                else "",
+                "caller_default_region": settings.caller_default_region,
+                "max_session_seconds": settings.max_session_seconds,
+            },
+            headers={"Cache-Control": "no-store"},
+        )
 
     @app.websocket("/audio/stream")
     async def stream(ws: WebSocket):

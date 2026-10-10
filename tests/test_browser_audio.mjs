@@ -60,3 +60,25 @@ test("PCM clipping and signed little-endian decoding", () => {
   assert.equal(decoded[0], 32767 / 32768);
   assert.equal(decoded[1], -1);
 });
+
+const { PlaybackGuard, riskColor, validAssessment, criteria } = await import("../src/scam_the_scamers/static/screening.js");
+for (const [score, color] of [[49,"green"],[50,"amber"],[74,"amber"],[75,"red"],[89,"red"],[90,"critical"],[NaN,"unavailable"],[-1,"unavailable"]]) {
+  test(`risk boundary ${score}: ${color}`, () => assert.equal(riskColor(score), color));
+}
+test("playback guard is bounded, cancels with a tail, and resumes", () => {
+  const guard = new PlaybackGuard();
+  assert.equal(guard.begin(0, 13), false);
+  assert.equal(guard.begin(100, 2), true);
+  assert.equal(guard.active(3099), true);
+  assert.equal(guard.active(3100), false);
+  guard.begin(4000, 2); guard.cancel(4100);
+  assert.equal(guard.active(4599), true);
+  assert.equal(guard.active(4600), false);
+  guard.reset(); assert.equal(guard.active(0), false);
+});
+test("assessment contract requires every criterion and finite values", () => {
+  const value = { revision: 1, overall: 50, criteria: Object.fromEntries(Object.keys(criteria).map(k => [k, 50])) };
+  assert.equal(validAssessment(value), true);
+  value.criteria.secrecy = NaN; assert.equal(validAssessment(value), false);
+  delete value.criteria.secrecy; assert.equal(validAssessment(value), false);
+});

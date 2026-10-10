@@ -21,7 +21,7 @@ def test_no_keys_still_serves_ui_and_liveness_but_cannot_start_provider():
         assert client.get("/healthz").status_code == 200
         assert client.get("/readyz").status_code == 503
         config = client.get("/api/config").json()
-        assert config["missing"] == ["GRADIUM_API_KEY", "LLM_API_KEY"]
+        assert config["missing"] == ["GRADIUM_API_KEY", "GEMINI_API_KEY or LLM_API_KEY"]
         with pytest.raises(WebSocketDisconnect):
             with client.websocket_connect(
                 "ws://localhost:8082/audio/stream", headers=LOCAL_HEADERS
@@ -94,3 +94,30 @@ def test_same_origin_localhost_and_loopback_work():
             ) as ws:
                 ws.send_json(start_message())
                 assert ws.receive_json()["event"] == "ready"
+
+
+def test_email_recipient_is_local_configuration_not_a_browser_relay():
+    from test_providers import email_settings
+
+    settings = email_settings()
+    factory = DemoFactory(settings)
+    with TestClient(create_app(settings, factory), base_url=LOCAL_URL) as client:
+        response = client.get("/api/config")
+        assert response.headers["cache-control"] == "no-store"
+        assert response.json()["fallback_email"] == "caregiver@example.com"
+        assert "fake-resend" not in response.text
+        with client.websocket_connect(
+            "ws://localhost:8082/audio/stream", headers=LOCAL_HEADERS
+        ) as ws:
+            ws.send_json({**start_message(), "recipient": "another@example.com"})
+            assert ws.receive()["code"] == 1008
+    assert not factory.sessions
+
+
+def test_websocket_query_parameters_are_rejected():
+    with TestClient(create_app(simulation_settings()), base_url=LOCAL_URL) as client:
+        with pytest.raises(WebSocketDisconnect):
+            with client.websocket_connect(
+                "ws://localhost:8082/audio/stream?recipient=x", headers=LOCAL_HEADERS
+            ):
+                pass

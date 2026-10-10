@@ -1,10 +1,20 @@
 # Scam the Scamers
 
-Build the local laptop-microphone listener and voice agent. Keep the interface
+Build the local laptop-microphone scam-screening pipeline. Keep the interface
 and documentation in English. Sound level triggers the agent; the app cannot
 detect phone-call acceptance. Never present activity indicators as external tool
-execution when no tool is wired. The standalone scam database is separate from
-the voice agent until explicitly integrated.
+execution when no tool is wired. The explicit live-screening request supersedes
+the old listener-only scope: Gradium STT, Gemini six-criterion classification,
+the preserved suspicious-number SQLite lookup, optional Gradium warning TTS and
+Resend fallback email are integrated. No open-ended voice replies or greetings.
+
+Validate complete bounded scores and the published weighted rubric; scores are
+not calibrated fraud probabilities. Score-only assessments must never call TTS.
+Email tiers are 50/75/90, with session-local idempotency and bounded retry.
+Missing email configuration must remain visible without blocking screening.
+Development tests must never send real email without separate explicit approval.
+Keep caller speech untrusted, context bounded and warning playback suppressed
+from STT. Missing or failed number lookup never means known-safe.
 
 Keep API keys on the server and audio/transcripts out of application storage and
 logs. Preserve same-origin WebSocket checks, bounded buffers, timeouts, and

@@ -56,3 +56,19 @@ def test_load_scam_set():
 
     # Missing path returns empty set
     assert load_scam_set("/nonexistent/file.txt") == set()
+
+
+def test_screening_lookup_states_and_swiss_normalization(tmp_path):
+    from scam_the_scamers.caller import lookup_caller
+
+    assert lookup_caller("").status == "not_provided"
+    assert lookup_caller("not a phone").status == "invalid"
+    assert lookup_caller("079 123 45 67").number == "+41791234567"
+    assert lookup_caller("0041 79 123 45 67").number == "+41791234567"
+    assert lookup_caller("+12013759200").status == "matched"
+    assert lookup_caller("+12013759200").source == "shalom_karr_ai_blocklist"
+    assert lookup_caller("+41799999999").status == "no_match"
+    assert lookup_caller("+12013759200", db_path=tmp_path / "missing.db").status == "unavailable"
+    invalid_db = tmp_path / "broken.db"
+    invalid_db.write_text("not sqlite")
+    assert lookup_caller("+12013759200", db_path=invalid_db).status == "unavailable"

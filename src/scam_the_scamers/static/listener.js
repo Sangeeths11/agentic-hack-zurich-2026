@@ -1,7 +1,17 @@
 import { LevelTrigger, decodePcm } from "./audio.js";
-import { addActivity, showActivityPhase } from "./activity.js";
+import { addActivity, showActivityPhase, showTool } from "./activity.js";
 
+import { criteria, riskColor, validAssessment, PlaybackGuard } from "./screening.js";
+
+const guard = new PlaybackGuard();
+let revision = 0, finishing = false, warningPlaybackAllowed = false;
 const $ = (id) => document.getElementById(id);
+for (const [key, label] of Object.entries(criteria)) {
+  const row = document.createElement("div"); row.className = "criterion"; row.id = `criterion-${key}`; row.dataset.risk = "unavailable";
+  const name = document.createElement("span"); name.textContent = label;
+  const value = document.createElement("strong"); value.id = `score-${key}`; value.textContent = "—";
+  row.append(name, value); $("criteria-scores").append(row);
+}
 const trigger = new LevelTrigger();
 let enabled = false,
   preparing = false,
@@ -27,27 +37,27 @@ const states = {
   armed: [
     "LISTENER ACTIVE",
     "I'm listening.",
-    "The conversation starts automatically when someone speaks.",
+    "Screening starts automatically when someone speaks.",
   ],
   connecting: [
     "VOICE DETECTED",
-    "I'll be right there.",
-    "Your assistant is connecting. The start of your sentence is briefly buffered.",
+    "Connecting screening…",
+    "Gradium STT is connecting. The start of your sentence is briefly buffered.",
   ],
   listening: [
-    "CONVERSATION ACTIVE",
+    "SCREENING ACTIVE",
     "I'm listening.",
-    "Speak naturally. The reply will play through your laptop.",
+    "Scores update quietly. Only eligible cautions play through your laptop.",
   ],
   thinking: [
-    "CONVERSATION ACTIVE",
+    "SCREENING ACTIVE",
     "One moment …",
-    "Your assistant is preparing a reply.",
+    "Gemini is assessing the accumulated call context.",
   ],
   speaking: [
-    "CONVERSATION ACTIVE",
-    "Your assistant is speaking.",
-    "You can interrupt at any time.",
+    "SCREENING ACTIVE",
+    "A moment of caution.",
+    "Microphone forwarding resumes after the warning. You can stop the audio.",
   ],
   error: [
     "LISTENER PAUSED",
@@ -85,13 +95,17 @@ function clearPlayback() {
 }
 function closeSession(
   rearm = true,
-  reason = "The voice connection has ended.",
+  reason = "The screening connection has ended.",
 ) {
   clearTimeout(startupTimer);
+  finishing = false;
+  warningPlaybackAllowed = false;
+  guard.reset();
+  $("cancel-warning").hidden = true;
   const old = socket;
   socket = null;
   if (old) {
-    addActivity("Conversation ended", reason);
+    addActivity("Screening ended", reason);
     if (old.readyState === WebSocket.OPEN)
       old.send(JSON.stringify({ event: "stop" }));
     old.close();
@@ -102,6 +116,10 @@ function closeSession(
   trigger.reset();
   cooldownUntil = performance.now() + 1000;
   $("session-time").textContent = "LOCAL / 01";
+  if (old) {
+    $("assessment-status").textContent = "Session ended. Last assessment is no longer live.";
+    for (const tool of ["stt", "gemini", "tts"]) $(`tool-${tool}`).textContent = "Disconnected";
+  }
   if (rearm && enabled) setPhase("armed");
 }
 async function stop() {
@@ -133,6 +151,7 @@ async function stop() {
   }
   document.documentElement.style.setProperty("--level", 0);
   $("level-value").textContent = "— dB";
+  $("caller-number").disabled = false;
   $("toggle-label").textContent = "Enable listener";
   $("toggle").disabled = !configured;
   stopping = false;
@@ -140,6 +159,7 @@ async function stop() {
 }
 async function fail(message) {
   await stop();
+  resetScores("Screening unavailable. Enable the listener again after resolving the error.");
   $("error").textContent = message;
   $("error").hidden = false;
   setPhase("error");
@@ -158,7 +178,11 @@ function pump() {
   for (let i = 0; i < 4 && pending.length; i++) socket.send(pending.shift());
 }
 function play(data) {
-  if (!context || context.state !== "running") return;
+  if (!warningPlaybackAllowed) return;
+  if (!context || context.state !== "running") {
+    void fail("Warning playback is blocked. Enable browser audio and try again.");
+    return;
+  }
   if (!data.byteLength || data.byteLength % 2) {
     void fail("Invalid response audio. Please enable the listener again.");
     return;
@@ -188,6 +212,10 @@ function play(data) {
 function startSession() {
   if (!enabled || socket) return;
   trigger.reset();
+  revision = 0;
+  resetScores("Waiting for speech and a valid assessment.");
+  $("warning-text").hidden = true;
+  $("tool-tts").textContent = "No warning requested";
   setPhase("connecting");
   pending = preRoll.slice();
   preRoll = [];
@@ -212,6 +240,7 @@ function startSession() {
           encoding: "pcm_s16le",
           sample_rate: 24000,
           channels: 1,
+          caller_number: $("caller-number").value,
         }),
       );
   };
@@ -234,19 +263,38 @@ function startSession() {
         return;
       }
       clearTimeout(startupTimer);
+      showCaller(event.caller);
+      $("tool-resend").textContent = event.email_status.replaceAll("_", " ");
       setPhase("listening");
       pump();
+    } else if (event.event === "assessment") {
+      if (!validAssessment(event)) { void fail("Invalid assessment from server."); return; }
+      if (event.revision <= revision) return;
+      revision = event.revision;
+      showScores(event);
+      if (phase === "thinking") setPhase("listening");
+    } else if (event.event === "assessment_unavailable") {
+      if (event.revision < revision) return;
+      revision = event.revision;
+      resetScores("Assessment unavailable. Listening continues; waiting for new speech.");
+      if (phase === "thinking") setPhase("listening");
+    } else if (event.event === "tool") {
+      showTool(event);
+      if (event.tool === "gemini" && event.status === "assessing" && phase === "listening") setPhase("thinking");
+    } else if (event.event === "warning") {
+      if (!guard.begin(performance.now(), event.duration_seconds)) { void fail("Invalid warning audio duration."); return; }
+      warningPlaybackAllowed = true;
+      $("warning-text").textContent = event.text;
+      $("warning-text").hidden = false;
+      $("cancel-warning").hidden = false;
     } else if (event.event === "clear") {
+      warningPlaybackAllowed = false;
       clearPlayback();
-      addActivity(
-        "Reply interrupted",
-        "Playback cleared so the agent can listen.",
-      );
+      guard.cancel(performance.now());
+      $("cancel-warning").hidden = true;
       setPhase("listening");
-    } else if (event.event === "thinking") {
-      setPhase("thinking");
-      lastActivity = performance.now();
     }
+
   };
   ws.onclose = (event) => {
     if (socket !== ws) return;
@@ -287,8 +335,9 @@ function onFrame({ pcm, rms }) {
     if (now >= cooldownUntil && trigger.update(rms, 20)) startSession();
     return;
   }
-  if (!socket) return;
-  pending.push(pcm);
+  if (!socket || finishing) return;
+  // Keep PCM heartbeats flowing while preventing our own warning from re-entering STT.
+  pending.push(guard.active(now) ? new ArrayBuffer(pcm.byteLength) : pcm);
   if (pending.length > 750) {
     void fail(
       "Connecting is taking too long. Please enable the listener again.",
@@ -298,22 +347,18 @@ function onFrame({ pcm, rms }) {
   pump();
   if (db >= trigger.thresholdDb || context.currentTime < playbackUntil)
     lastActivity = now;
-  if (phase === "speaking" && context.currentTime >= playbackUntil)
+  if (phase === "speaking" && context.currentTime >= playbackUntil) {
+    $("cancel-warning").hidden = true;
     setPhase("listening");
+  }
   const seconds = Math.floor((now - startedAt) / 1000);
   $("session-time").textContent =
     `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
   if (phase !== "connecting") {
     if (seconds >= maxSessionSeconds - 1)
-      closeSession(
-        true,
-        "Session limit reached. Waiting for the next conversation.",
-      );
+      finishSession("Session limit reached. Finalizing the last utterance.");
     else if (now - lastActivity > 30000)
-      closeSession(
-        true,
-        "30 seconds of quiet. Waiting for the next conversation.",
-      );
+      finishSession("30 seconds of quiet. Finalizing the last utterance.");
   }
 }
 async function start() {
@@ -370,6 +415,7 @@ async function start() {
         void fail("Browser audio is paused. Please enable the listener again.");
     };
     enabled = true;
+    $("caller-number").disabled = true;
     preparing = false;
     trigger.reset();
     cooldownUntil = 0;
@@ -392,7 +438,7 @@ $("toggle").addEventListener("click", () => {
   else void start();
 });
 $("end-session").addEventListener("click", () =>
-  closeSession(true, "Ended by you. The listener is waiting for sound."),
+  finishSession("Ended by you. Finalizing the last utterance."),
 );
 $("sensitivity").addEventListener("input", (event) => {
   trigger.thresholdDb = Number(event.target.value);
@@ -412,6 +458,11 @@ try {
   const config = await response.json();
   configured = config.configured;
   maxSessionSeconds = config.max_session_seconds;
+  $("caller-help").textContent = `Enter an international number (+country code), or a local number in ${config.caller_default_region}. Caller ID is not detected.`;
+  $("fallback-status").textContent = config.email_status === "configured"
+    ? `Fallback: ${config.fallback_email}. Automatic alerts at 50, 75 and 90; actual delivery is not yet verified.`
+    : `Fallback email: ${config.email_status.replaceAll("_", " ")}. Screening works without email alerts.`;
+  $("tool-resend").textContent = config.email_status.replaceAll("_", " ");
   $("toggle").disabled = !configured;
   $("toggle-label").textContent = "Enable listener";
   if (!configured) {
@@ -424,4 +475,52 @@ try {
     "The local server is unavailable. Run scripts/run_local.sh and reload this page.";
   $("error").hidden = false;
   $("toggle-label").textContent = "Server unavailable";
+}
+
+function finishSession(reason) {
+  if (!socket || finishing) return;
+  if (phase === "connecting") { closeSession(true, reason); return; }
+  finishing = true;
+  while (pending.length && socket.readyState === WebSocket.OPEN) socket.send(pending.shift());
+  addActivity("Finishing screening", reason);
+  socket.send(JSON.stringify({ event: "finish" }));
+  startupTimer = setTimeout(() => void fail("Final assessment timed out. Please enable the listener again."), 40000);
+}
+$("cancel-warning").addEventListener("click", () => {
+  warningPlaybackAllowed = false;
+  clearPlayback();
+  guard.cancel(performance.now());
+  $("cancel-warning").hidden = true;
+  if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ event: "cancel_warning" }));
+});
+function resetScores(message) {
+  $("overall-score").textContent = "—";
+  $("risk-level").textContent = "Unavailable / waiting";
+  $("risk-panel").dataset.risk = "unavailable";
+  $("assessment-status").textContent = message;
+  for (const key of Object.keys(criteria)) {
+    $(`score-${key}`).textContent = "—";
+    $(`criterion-${key}`).dataset.risk = "unavailable";
+  }
+}
+function showScores(event) {
+  $("overall-score").textContent = `${event.overall} / 100`;
+  const color = riskColor(event.overall);
+  $("risk-panel").dataset.risk = color;
+  $("risk-level").textContent = { green: "Lower indicators", amber: "Caution", red: "High", critical: "Critical" }[color];
+  $("assessment-status").textContent = `Assessment ${event.revision} · ${event.context_truncated ? "Context limit reached; opening and recent speech retained." : "Based on accumulated speech. Mistakes are possible."}`;
+  for (const key of Object.keys(criteria)) {
+    $(`score-${key}`).textContent = `${event.criteria[key]} / 100`;
+    $(`criterion-${key}`).dataset.risk = riskColor(event.criteria[key]);
+  }
+}
+function showCaller(caller) {
+  const descriptions = {
+    not_provided: "No caller number provided.", invalid: "Invalid number; lookup was not performed.",
+    unavailable: "Number database unavailable. Caller risk is unknown.",
+    no_match: "No match in this dataset. This does not mean the caller is safe.",
+    matched: `Listed by ${caller.source} (${caller.listed_at}). Listings may be stale and caller ID can be spoofed.`,
+  };
+  $("caller-result").textContent = descriptions[caller.status] || "Lookup unavailable.";
+  showTool({ tool: "db", status: caller.status, detail: $("caller-result").textContent });
 }

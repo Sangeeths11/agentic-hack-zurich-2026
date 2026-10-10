@@ -1,19 +1,21 @@
 [project]
 name = "scam-the-scamers"
 version = "0.3.0"
-description = "Local microphone listener with Gradbot and Gradium voice responses"
+description = "Live microphone scam screening with Gradium, Gemini and Resend"
 requires-python = ">=3.12,<3.13"
 dependencies = [
     "fastapi>=0.115,<1",
     "anyio>=4,<5",
     "uvicorn[standard]>=0.30,<1",
     "pydantic-settings>=2.6,<3",
-    "gradbot==0.1.9",
+    "httpx>=0.28,<1",
+    "websockets>=15,<16",
+    "phonenumbers>=9,<10",
+    "email-validator>=2,<3",
 ]
 
 [dependency-groups]
 dev = [
-    "httpx>=0.28,<1",
     "pytest>=8,<10",
     "pytest-asyncio>=0.24,<2",
     "ruff>=0.11,<1",
@@ -28,13 +30,16 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/scam_the_scamers"]
+packages = ["src/scam_the_scamers", "src/familyshield"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"data/scam_numbers/scam_numbers.db" = "familyshield/data/scam_numbers.db"
 
 [tool.hatch.build.targets.sdist]
 include = [
     "/src/**", "/tests/**", "/scripts/**", "/.github/**",
     "/README.md", "/pyproject.toml", "/uv.lock", "/.python-version",
-    "/.env.example", "/.gitignore",
+    "/.env.example", "/.gitignore", "/data/scam_numbers/**", "/docs/**",
 ]
 
 [tool.ruff]

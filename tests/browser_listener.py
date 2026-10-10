@@ -11,9 +11,10 @@ from pathlib import Path
 
 import uvicorn
 from playwright.async_api import async_playwright
-from support import DemoFactory, simulation_settings
+from support import DemoFactory, assessment, simulation_settings
 
 from scam_the_scamers.main import create_app
+from scam_the_scamers.providers import ProviderError, TranscriptEvent
 
 SYNTHETIC_MICROPHONE = """
 (() => {
@@ -60,8 +61,9 @@ async def wait_browser(page, expression, deadline_ms=5000):
 
 
 async def main():
-    factory = DemoFactory()
-    app = create_app(simulation_settings(max_session_seconds=60), factory)
+    settings = simulation_settings(max_session_seconds=60)
+    factory = DemoFactory(settings, assessment(49))
+    app = create_app(settings, factory)
     sock = socket.socket()
     sock.bind(("127.0.0.1", 0))
     port = sock.getsockname()[1]
@@ -86,27 +88,75 @@ async def main():
                 await wait_browser(page, "!document.querySelector('#toggle').disabled")
                 assert await page.locator("#listener-panel").is_visible()
                 assert await page.locator("#tools-panel").is_visible()
-                assert await page.get_by_text("No tools connected yet", exact=True).is_visible()
+                assert "not configured" in await page.locator("#fallback-status").inner_text()
+                assert await page.locator("#overall-score").inner_text() == "—"
+                await page.locator("#caller-number").fill("+12013759200")
                 await page.screenshot(path=str(artifacts / "listener-desktop.png"), full_page=True)
                 await page.get_by_role("button", name="Enable listener").click()
                 await wait_browser(page, "document.querySelector('#orb').dataset.state === 'armed'")
                 await page.wait_for_timeout(500)
                 assert not factory.sessions, "Silence must never open a provider session"
                 await page.evaluate("testAudio.gain.gain.value = 0.12")
-                await wait_browser(page, "testAudio.starts > 0")
+                await wait_browser(
+                    page, "document.querySelector('#overall-score').textContent === '49 / 100'"
+                )
                 await page.evaluate("testAudio.gain.gain.value = 0")
+                assert await page.evaluate("testAudio.starts === 0"), "Low risk must not play audio"
+                assert not factory.speech.calls and not factory.email.calls
+                assert await page.locator("#risk-panel").get_attribute("data-risk") == "green"
+                assert await page.locator("#tool-db").inner_text() == "matched"
+                assert (
+                    "shalom_karr_ai_blocklist" in await page.locator("#caller-result").inner_text()
+                )
+                assert await page.locator("#criteria-scores .criterion").count() == 6
+
+                # Exercise exact displayed thresholds through the real backend pipeline.
+                for score, color in [(50, "amber"), (75, "red"), (90, "critical")]:
+                    factory.classifier.result = assessment(score, warning=(score == 90))
+                    await factory.stts[0].events.put(
+                        TranscriptEvent("text", "Synthetic escalation.")
+                    )
+                    await wait_browser(
+                        page,
+                        f"document.querySelector('#overall-score').textContent === '{score} / 100'",
+                    )
+                    assert await page.locator("#risk-panel").get_attribute("data-risk") == color
+                    assert (
+                        await page.locator("#criterion-secrecy").get_attribute("data-risk") == color
+                    )
+                await wait_browser(page, "testAudio.starts > 0")
+                before_calls = len(factory.classifier.calls)
+                before_frames = len(factory.stts[0].received)
+                # Simulate speaker leakage with a loud synthetic mic during warning playback.
+                await page.evaluate("testAudio.gain.gain.value = 0.12")
+                await page.wait_for_timeout(180)
+                guarded_frames = factory.stts[0].received[before_frames:]
+                assert guarded_frames and all(not any(frame) for frame in guarded_frames)
+                assert len(factory.classifier.calls) == before_calls, (
+                    "Playback must not trigger another assessment"
+                )
+                await page.get_by_role("button", name="Stop warning audio").click()
                 await wait_browser(page, "testAudio.stops > 0")
+                await page.wait_for_timeout(700)
+                assert any(factory.stts[0].received[-1]), (
+                    "Microphone must resume after bounded guard"
+                )
+                await page.evaluate("testAudio.gain.gain.value = 0")
                 assert len(factory.sessions) == 1
+                assert len(factory.speech.calls) == 1 and not factory.email.calls
                 activity = await page.locator("#activity-log").inner_text()
                 for title in (
                     "Listener enabled",
                     "Sound detected",
-                    "Agent connected",
-                    "Preparing a reply",
-                    "Agent speaking",
-                    "Reply interrupted",
+                    "Screening connected",
+                    "Gemini",
+                    "Gradium STT",
+                    "Gradium TTS",
+                    "Resend email",
+                    "Warning playing",
                 ):
                     assert title in activity, activity
+                assert "delivered" not in activity.lower()
                 assert await page.locator("#microphone-status").inner_text() == "Listening"
                 await page.screenshot(path=str(artifacts / "listener-active.png"), full_page=True)
                 # Changing the workspace view must leave the audio session untouched.
@@ -122,7 +172,7 @@ async def main():
                 assert await page.locator("#activity-status").inner_text() == "Live"
                 await page.get_by_role("button", name="Listener", exact=True).click()
                 assert not await page.locator("#tools-panel").is_visible()
-                await page.get_by_role("button", name="End conversation").click()
+                await page.get_by_role("button", name="End screening").click()
                 await wait_browser(page, "document.querySelector('#orb').dataset.state === 'armed'")
                 assert "Ended by you" in await page.locator("#activity-log").inner_text()
                 await page.get_by_role("button", name="Pause listener").click()
@@ -133,20 +183,22 @@ async def main():
                     "testAudio.stream.getTracks().every(t => t.readyState === 'ended')"
                 )
                 assert await page.evaluate("testAudio.contexts.every(c => c.state === 'closed')")
+                await asyncio.sleep(0.1)
                 assert not app.state.registry.sockets
                 assert factory.sessions[0].closed
                 print(
-                    "Browser: silence, auto-trigger, PCM playback, interruption, "
-                    "end/rearm and pause passed",
+                    "Browser: trigger, risk scores/colors, low-risk no TTS, warning playback, "
+                    "feedback suppression, cancellation, end/rearm and pause passed",
                     flush=True,
                 )
 
+                factory.classifier.result = assessment(20)
                 # Restart and verify the automatic idle return, with a real worklet clock.
                 await page.get_by_role("button", name="Enable listener").click()
                 await wait_browser(page, "document.querySelector('#orb').dataset.state === 'armed'")
                 await page.evaluate("testAudio.gain.gain.value = 0.12")
                 await wait_browser(
-                    page, "document.querySelector('#orb').dataset.state === 'speaking'"
+                    page, "document.querySelector('#overall-score').textContent === '20 / 100'"
                 )
                 await page.evaluate("testAudio.gain.gain.value = 0")
                 await wait_browser(
@@ -176,6 +228,23 @@ async def main():
                     flush=True,
                 )
 
+                # An actual fake-provider error is visible; no fictional score survives.
+                await page.get_by_role("button", name="Listener", exact=True).click()
+                factory.classifier.error = ProviderError("gemini", "synthetic failure")
+                await page.get_by_role("button", name="Enable listener").click()
+                await wait_browser(page, "document.querySelector('#orb').dataset.state === 'armed'")
+                await page.evaluate("testAudio.gain.gain.value = 0.12")
+                await wait_browser(
+                    page,
+                    "document.querySelector('#assessment-status').textContent.includes('unavailable')",
+                )
+                assert await page.locator("#overall-score").inner_text() == "—"
+                assert await page.locator("#tool-gemini").inner_text() == "error"
+                await page.get_by_role("button", name="Pause listener").click()
+                await asyncio.sleep(0.1)
+                assert factory.stts[-1].closed
+                factory.classifier.error = None
+
                 # Denied access must be actionable and must not create a provider session.
                 await page.evaluate(
                     "() => { navigator.mediaDevices.getUserMedia = async () => { "
@@ -195,6 +264,25 @@ async def main():
                 assert not await page.locator("#tools-panel").is_visible()
                 assert await page.locator("#activity-log li").count() == 0
                 assert not app.state.registry.sockets
+                # Missing readiness must disable start before asking for microphone access.
+                await page.route(
+                    "**/api/config",
+                    lambda route: route.fulfill(
+                        json={
+                            "configured": False,
+                            "missing": ["GRADIUM_API_KEY"],
+                            "email_status": "not_configured",
+                            "fallback_email": "",
+                            "caller_default_region": "CH",
+                            "max_session_seconds": 60,
+                        }
+                    ),
+                )
+                await page.reload()
+                await wait_browser(
+                    page, "document.querySelector('#error').textContent.includes('Finish setup')"
+                )
+                assert await page.locator("#toggle").is_disabled()
                 assert not errors, errors
                 print(
                     json.dumps(

@@ -1,104 +1,182 @@
 # Scam the Scamers
 
-A local voice agent that listens beside your phone and responds through your
-laptop. Put your phone on speaker, place your laptop beside it, and enable the listener.
+A local call-screening companion. Answer a call on your phone, turn on
+speakerphone, and place your laptop nearby. The browser microphone sends audio
+through the backend to Gradium STT. Gemini scores six warning signs; scores
+update quietly. Only eligible caution text is sent to Gradium TTS and played aloud.
+There are no greetings or open-ended agent replies.
 
 ## Getting started
 
-Requires [uv](https://docs.astral.sh/uv/getting-started/installation/).
-Setup installs Python 3.12. Gradbot 0.1.9 natively supports
-macOS on Apple Silicon and Linux x86_64.
+Requires [uv](https://docs.astral.sh/uv/getting-started/installation/). Setup installs
+Python 3.12 and the application dependencies.
 
 ```bash
 scripts/setup.sh
-# Add GRADIUM_API_KEY and LLM_API_KEY to .env
+# Privately add GRADIUM_API_KEY and GEMINI_API_KEY (or existing LLM_API_KEY) to .env.
 scripts/run_local.sh
 ```
 
-Open **http://localhost:8082**, click **Enable listener**, and allow microphone
-access. Your browser must support AudioWorklet. Keep the tab open and your
-computer awake during the conversation.
+Open **http://localhost:8082**. Optionally enter the caller's phone number, check the
+fallback email status, click **Enable listener**, and allow microphone access.
+Keep the tab open and computer awake. Sound above the adjustable threshold for
+180 ms starts screening; a bounded pre-roll preserves the start of speech.
+Ringing or music can trigger it. The app cannot detect call acceptance or caller ID.
 
-## How it works
+The responsive workspace offers **Split view**, **Listener** and **Tools & activity**.
+Switching views does not interrupt audio. Scores start as waiting, never invented zeroes.
+Actual Gradium STT, Gemini, SQLite lookup, Gradium TTS and Resend results/errors appear
+in the activity panel. The most recent 60 events stay only in page memory.
 
-- Answer the call on your phone and turn on speakerphone.
-- The animated circle shows the microphone level. After 180 ms above the
-  adjustable threshold, the agent starts automatically. A short audio buffer
-  preserves the start of your sentence while the connection opens.
-- The agent introduces itself as an AI assistant, listens, and responds through
-  the laptop speakers. You can interrupt its reply.
-- **End conversation** returns the listener to waiting for the next conversation.
-  This also happens automatically after 30 seconds of silence or the session limit.
-- **Pause listener** ends the session, stops playback, and releases the microphone.
+**End screening** flushes the last audio/text and returns to waiting. After 30 seconds
+of quiet the browser also finalizes the session. **Pause listener** immediately
+cancels work, stops playback and releases the microphone. The server enforces a
+capture time limit, provider/media timeouts and a concurrency limit. Finalization
+has at most the request timeout plus 15 seconds of grace; pause/disconnect still
+cancels immediately during that grace period.
 
-The workspace opens in **Split view** on a laptop: the listener on the left and
-**Tools & activity** on the right. Switch to either panel on its own without
-interrupting the microphone or conversation. On small screens, the listener is
-shown first; use the view buttons to switch panels or show both vertically.
+## Scores and warnings
 
-The activity panel shows the current microphone, agent and speaker states, plus
-timestamped connection, reply, interruption, end and error events. It keeps the
-latest 60 events in page memory; **Clear activity** clears this display without
-ending the conversation. Reloading the page clears the history. No external tools
-are currently configured; the tools section is a placeholder for future integrations.
+Criterion scores describe evidence strength: 0 absent, 25 ambiguous, 50 plausible,
+75 strong, 100 explicit. They are model judgments, not calibrated probabilities.
+The overall screening indicator is the weighted sum below, rounded to one decimal.
+Gemini must return all six scores and the overall; invalid or inconsistent responses
+show unavailable, without fabricating scores or speech.
 
-The trigger detects sound levels, not phone call status. Ringing or music can
-also activate it. Adjust the threshold and volume to suit your setup. The
-requested echo cancellation depends on your browser and device; test with a second phone.
+| Criterion | Example | Overall weight |
+| --- | --- | ---: |
+| Family-member claim | “I'm your daughter.” | 5% |
+| Emotional distress | “I've been arrested.” | 10% |
+| Urgency | “Within the hour.” | 20% |
+| Secrecy | “Don't tell Mum and Dad.” | 20% |
+| Financial request | “CHF 5,000 in cash.” | 25% |
+| Courier pickup | “Someone will collect the cash.” | 20% |
 
-## Configuration
+A family claim by itself contributes at most **5/100**. Each criterion and the overall
+use green below 50, amber from 50, red from 75 and critical from 90. Higher values
+warrant caution and independent verification; they do not establish fraud. A criterion
+can have strong evidence without the whole call being suspicious. The rubric needs
+real-world calibration and may miss other scam patterns.
 
-Only `GRADIUM_API_KEY` and `LLM_API_KEY` are required. `.env.example` lists
-additional options: model provider, model, name, language, voice, and time limits.
-Defaults: English, `gpt-4o-mini`, one session at a time, and a five-minute session limit.
-Restart the server after changing configuration.
+Default `WARNING_THRESHOLD=50` controls spoken cautions independently of email tiers.
+Gemini may return no warning text, even at high scores; this never triggers TTS.
+Eligible text must be one of three short caution phrases defined in `risk.py`, preventing
+caller-injected instructions from being spoken. Each reached warning tier is attempted
+at most once per session; failed/cancelled warnings are not repeatedly synthesized.
+**Stop warning audio** cancels playback. Echo cancellation plus bounded silence forwarding
+in the browser/backend prevents warning audio from feeding back into the classifier.
+Speech overlapping a warning can be missed; real speakerphone acoustic testing is still
+required. A browser audio error pauses the listener with an actionable message.
+
+## Caller number lookup
+
+The optional number is supplied by you, never detected. International `+` numbers
+are supported; national numbers default to **Switzerland (`CALLER_DEFAULT_REGION=CH`)**.
+For example `079 123 45 67` becomes `+41791234567`, not a US number. Use an explicit
+international prefix for other countries or configure the default ISO region.
+
+The existing [dataset and provenance](data/scam_numbers/README.md) are preserved and
+queried locally with read-only, parameterized SQLite. The wheel includes the database;
+`SCAM_DB_PATH` can explicitly override its location. UI states distinguish omitted,
+invalid, matched, no match and unavailable. A match includes source/import time and
+may be stale; caller ID can be spoofed. No match is **not** proof of safety. Lookup
+status is explicit Gemini context, with no automatic numerical score bonus.
+
+## Fallback email via Resend
+
+Set these privately in `.env`, then restart the server:
+
+```dotenv
+RESEND_API_KEY=
+ALERT_FROM_EMAIL=
+FALLBACK_EMAIL=
+```
+
+Use a plain sender address verified in your Resend account and one valid recipient.
+The local UI displays the configured fallback address before listening. Missing or
+invalid configuration is clearly marked and does not prevent screening. Once configured,
+starting the listener enables automatic runtime alerts; the browser cannot supply a
+recipient, sender or arbitrary email body.
+
+A first crossing of 50 sends a caution; reaching 75 or 90 escalates. A direct jump to
+90 sends one critical alert. Repeated scores and falling/rising jitter do not resend
+previous tiers. Pending unsent escalations coalesce to the highest. Attempted and
+API-accepted tiers are tracked separately in session memory. Transport failures, 429
+and 5xx receive at most **one retry after one second**, using the same idempotency key
+and exact payload; a newer pending tier supersedes the retry. Authentication/validation
+failures are not retried. No repeated retry on each transcript. New sessions have new
+identities, so they may alert again; restarting is not a delivery recovery mechanism.
+
+Emails contain severity, UTC time, caller context and criterion scores, without raw
+transcripts. “Accepted by Resend” is not verified inbox delivery. No delivery webhook
+is installed. **Development and `doctor --live` never send real email**; transport tests
+use fakes. Email credentials and a separately authorized delivery test remain needed.
+
+## Configuration and privacy
+
+`.env.example` lists supported options. Existing `LLM_API_KEY` remains valid;
+`GEMINI_API_KEY` takes precedence when nonempty. Existing Google configuration is
+preserved: `LLM_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai` and
+`LLM_MODEL=gemini-3.5-flash-lite`. Only Google's compatible endpoint and Gemini models
+are accepted; there is no fallback to another LLM. API keys stay on the server.
 
 ```bash
-uv run scam-the-scamers serve          # Run the server on 127.0.0.1:8082
-uv run scam-the-scamers doctor         # Check configuration only
-uv run scam-the-scamers doctor --live  # Check live voice providers; uses API credits
+uv run scam-the-scamers doctor         # Configuration only; no network or email
+uv run scam-the-scamers doctor --live  # Bounded synthetic Gemini/Gradium probes; API credits
 ```
 
-While waiting, audio stays in the browser. During a session, Gradium and the
-configured model provider process speech. The app saves no recordings or
-transcripts. API keys stay on the server. Connection errors pause the listener
-and display an error message.
+Defaults: one session, five-minute cap, 20-second HTTP request timeout, 45-second STT
+heartbeat timeout, 20-second media timeout and 1.5 seconds between classification
+starts. No first-TTS timeout exists: low-risk sessions can remain silent throughout.
+`FIRST_AUDIO_TIMEOUT_SECONDS` is obsolete and ignored for env compatibility.
 
-## Repository
+STT uses 24 kHz PCM in 80 ms frames and flushes after a short acoustic pause. Text
+segments accumulate; `end_text` and `flushed` are boundaries, not duplicate text.
+One Gemini request runs at a time, coalescing new text and ordering assessments by
+revision. Context is bounded to 12,000 characters; after clipping, the opening third
+and latest conversation are retained and the UI discloses truncation. This can lose
+middle context on long calls. Provider failures produce an unavailable assessment;
+new speech can trigger the next attempt. Pause/disconnect cancels in-flight work.
 
-```text
-src/scam_the_scamers/
-  agent.py          Voice agent and Gradbot integration
-  bridge.py         Audio streaming, interruptions, and session lifecycle
-  config.py         Settings and provider credentials
-  main.py           Local HTTP and WebSocket endpoints
-  cli.py            Startup and diagnostics
-  static/           Listener interface and browser audio
-scripts/            Setup and local startup
-tests/              Audio, protocol, and browser checks
-```
+While waiting, audio stays in the browser. During screening, Gradium processes audio,
+Google processes bounded transcript/lookup context, and configured Resend alerts process
+the risk summary and contact addresses. The app does not store or log audio/transcripts;
+provider retention policies are separate. Classification uses stateless chat requests,
+without provider conversation IDs. Contacts and keys are not committed. Same-origin
+WebSockets, loopback Host checks, CSP, bounded queues/messages and timeout cleanup remain.
 
-## Verification
+Provider formats were verified against official documentation:
+[Gradium STT](https://docs.gradium.ai/guides/speech-to-text),
+[Gradium lifecycle](https://docs.gradium.ai/guides/websocket-lifecycle),
+[Gradium TTS](https://docs.gradium.ai/guides/text-to-speech-rest),
+[Gemini compatible structured output](https://ai.google.dev/gemini-api/docs/openai#structured-output),
+[Resend send email and idempotency](https://resend.com/docs/api-reference/emails/send-email).
+The Google-compatible JSON-schema endpoint was selected to preserve the configured
+endpoint/model and verified with actual requests; no Interactions conversation is created.
+
+## Repository and verification
+
+`providers.py` owns concrete network adapters; `agent.py` orchestrates injected providers;
+`risk.py` defines validation/rubric; `alerts.py` manages delivery tiers; `caller.py` wraps
+the preserved dataset helper. `bridge.py` handles the browser transport, `main.py` the
+local HTTP routes, and `static/` the listener. Entire remains developer tooling.
 
 ```bash
 uv run ruff check src tests
 uv run ruff format --check src tests
 uv run mypy src
 uv run pytest -q
-node --test tests/test_browser_audio.mjs  # Node 22.7+
+node --test tests/test_browser_audio.mjs
 uv build
+uv run --with playwright python tests/browser_listener.py  # Installed Chrome required
 ```
 
-Optional, with Chrome installed:
-
-```bash
-uv run --with playwright python tests/browser_listener.py
-```
-
-Tests use synthetic audio and require no API keys. The browser test covers
-automatic activation, playback, interruptions, pausing, returning to listening
-after silence, denied microphone access, live activity, and switching workspace
-views while a conversation is active.
+Tests use fake providers, synthetic microphone audio and mock email transport, with no
+API keys required. The Chrome harness checks sound activation, six live scores/colors,
+low-risk silence, warning playback/suppression/cancellation, provider cleanup, end/quiet
+rearm, tabs/mobile layout, readiness and errors. See the
+[accepted work order](docs/live-scam-screening-task.md) and
+[evidence/demo notes](docs/live-scam-screening-evidence.md) for executed results and limits.
 
 ## Entire at the hackathon
 

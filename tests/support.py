@@ -1,114 +1,157 @@
-"""Offline browser protocol exercise with diagnostic tones, no speech or AI."""
+"""Synthetic in-memory provider doubles. No cloud, real speech, email or persistence."""
 
 import asyncio
 import audioop
 import math
 import struct
-import time
-import wave
-from pathlib import Path
 from typing import Any
 
-from scam_the_scamers.agent import AgentEvent
+from scam_the_scamers.agent import ScreeningFactory
 from scam_the_scamers.config import Settings
-from scam_the_scamers.main import create_app
+from scam_the_scamers.providers import TranscriptEvent
+from scam_the_scamers.risk import CRITERIA, WARNINGS, Assessment, Scores
 
 LOCAL_URL = "http://localhost:8082"
 LOCAL_HEADERS = {"origin": LOCAL_URL}
 
 
 def simulation_settings(**overrides) -> Settings:
-    values: dict[str, Any] = dict(gradium_api_key="offline", llm_api_key="offline")
+    values: dict[str, Any] = dict(
+        gradium_api_key="offline",
+        llm_api_key="offline",
+        classification_interval_seconds=0.1,
+    )
     values.update(overrides)
     return Settings(_env_file=None, **values)
 
 
-def tone(rate: int, frequency: float = 440, seconds: float = 0.1) -> bytes:
-    pcm = b"".join(
-        struct.pack("<h", int(5000 * math.sin(2 * math.pi * frequency * i / rate)))
+def assessment(score=20, warning=False) -> Assessment:
+    return Assessment(
+        criteria=Scores(**dict.fromkeys(CRITERIA, float(score))),
+        overall=float(score),
+        warning_text=WARNINGS[0] if warning else None,
+    )
+
+
+def microphone_audio(seconds: float = 0.02, rate: int = 24000) -> bytes:
+    return b"".join(
+        struct.pack("<h", int(5000 * math.sin(2 * math.pi * 440 * i / rate)))
         for i in range(round(rate * seconds))
     )
-    return audioop.lin2ulaw(pcm, 2)
 
 
-def microphone_audio(seconds: float = 0.02) -> bytes:
-    return audioop.ulaw2lin(tone(24000, seconds=seconds), 2)
-
-
-class DemoSession:
-    def __init__(self):
-        self.events: asyncio.Queue[AgentEvent | None] = asyncio.Queue(maxsize=8)
-        self.events.put_nowait(AgentEvent("audio", tone(48000)))
+class FakeSTT:
+    def __init__(self, auto_text=True):
+        self.events: asyncio.Queue[TranscriptEvent | None] = asyncio.Queue(maxsize=64)
         self.received: list[bytes] = []
         self.closed = False
+        self.finished = False
         self.responded = False
+        self.auto_text = auto_text
 
     async def send_audio(self, audio: bytes) -> None:
         self.received.append(audio)
-        if not self.responded and audioop.rms(audioop.ulaw2lin(audio, 2), 2) > 400:
+        # Keep test instrumentation bounded even for the 30-second browser scenario.
+        self.received[:] = self.received[-2000:]
+        if self.auto_text and not self.responded and audioop.rms(audio, 2) > 400:
             self.responded = True
-            await self.events.put(AgentEvent("interrupt"))
-            await self.events.put(AgentEvent("turn_end"))
-            await self.events.put(AgentEvent("audio", tone(48000, 660)))
+            await self.events.put(TranscriptEvent("text", "Synthetic family emergency scenario."))
+            await self.events.put(TranscriptEvent("boundary"))
 
-    async def receive(self) -> AgentEvent | None:
-        return await self.events.get()
+    async def receive(self):
+        try:
+            return await asyncio.wait_for(self.events.get(), 0.08)
+        except TimeoutError:
+            return TranscriptEvent("heartbeat")
 
-    async def close(self) -> None:
+    async def finish(self):
+        self.finished = True
+        await self.events.put(None)
+
+    async def close(self):
         self.closed = True
 
 
-class DemoFactory:
-    def __init__(self):
-        self.sessions: list[DemoSession] = []
+class FakeClassifier:
+    def __init__(self, result=None):
+        self.result = result or assessment()
+        self.calls = []
+        self.delay = 0
+        self.error = None
 
-    async def open(self) -> DemoSession:
-        session = DemoSession()
+    async def classify(self, transcript, caller):
+        self.calls.append((transcript, caller))
+        if self.delay:
+            await asyncio.sleep(self.delay)
+        if self.error:
+            raise self.error
+        return self.result
+
+
+class FakeSpeech:
+    def __init__(self):
+        self.calls = []
+        self.delay = 0
+        self.error = None
+
+    async def synthesize(self, text):
+        self.calls.append(text)
+        if self.delay:
+            await asyncio.sleep(self.delay)
+        if self.error:
+            raise self.error
+        return microphone_audio(seconds=0.6, rate=48000)
+
+
+class FakeEmail:
+    def __init__(self):
+        self.calls = []
+        self.failures = []
+
+    async def send(self, body, key):
+        self.calls.append((body, key))
+        if self.failures:
+            raise self.failures.pop(0)
+        return "fake-acceptance-id"
+
+
+class DemoFactory(ScreeningFactory):
+    def __init__(self, settings=None, result=None, auto_text=True):
+        self.stts = []
+        self.sessions = []
+        self.auto_text = auto_text
+        super().__init__(
+            settings or simulation_settings(),
+            stt_open=self.open_stt,
+            classifier=FakeClassifier(result),
+            speech=FakeSpeech(),
+            email=FakeEmail(),
+        )
+
+    async def open_stt(self):
+        stt = FakeSTT(self.auto_text)
+        self.stts.append(stt)
+        return stt
+
+    async def open(self, caller, session_id):
+        session = await super().open(caller, session_id)
         self.sessions.append(session)
         return session
 
 
-def start_message() -> dict:
-    return {"event": "start", "encoding": "pcm_s16le", "sample_rate": 24000, "channels": 1}
-
-
-def simulate(output: Path) -> dict:
-    from fastapi.testclient import TestClient
-
-    factory = DemoFactory()
-    app = create_app(simulation_settings(), factory)
-    recorded = bytearray()
-    with TestClient(app, base_url=LOCAL_URL) as client:
-        assert client.get("/").status_code == 200
-        with client.websocket_connect(
-            "ws://localhost:8082/audio/stream", headers=LOCAL_HEADERS
-        ) as ws:
-            started = time.perf_counter()
-            ws.send_json(start_message())
-            assert ws.receive_json()["event"] == "ready"
-            for _ in range(5):
-                recorded.extend(ws.receive_bytes())
-            greeting_ms = (time.perf_counter() - started) * 1000
-            ws.send_bytes(microphone_audio())
-            assert ws.receive_json()["event"] == "clear"
-            assert ws.receive_json()["event"] == "thinking"
-            for _ in range(5):
-                recorded.extend(ws.receive_bytes())
-            ws.send_json({"event": "stop"})
-            assert ws.receive()["code"] == 1000
-        assert factory.sessions[0].closed
-        assert not app.state.registry.sockets
-    output.parent.mkdir(parents=True, exist_ok=True)
-    with wave.open(str(output), "wb") as wav:
-        wav.setnchannels(1)
-        wav.setsampwidth(2)
-        wav.setframerate(48000)
-        wav.writeframes(recorded)
+def start_message(number="") -> dict:
     return {
-        "result": "passed",
-        "mode": "offline diagnostic tones (no AI speech)",
-        "greeting_transport_ms": round(greeting_ms, 2),
-        "interruption": "passed",
-        "cleanup": "passed",
-        "wav": str(output),
+        "event": "start",
+        "encoding": "pcm_s16le",
+        "sample_rate": 24000,
+        "channels": 1,
+        "caller_number": number,
     }
+
+
+async def next_event(session, kind, deadline=2):
+    async with asyncio.timeout(deadline):
+        while True:
+            event = await session.receive()
+            if event.payload.get("event") == kind:
+                return event

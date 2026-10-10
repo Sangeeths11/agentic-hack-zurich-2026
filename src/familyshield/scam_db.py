@@ -12,6 +12,8 @@ from pathlib import Path
 # Default path to the compiled SQLite database
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 DEFAULT_SCAM_DB_PATH = REPO_ROOT / "data" / "scam_numbers" / "scam_numbers.db"
+if not DEFAULT_SCAM_DB_PATH.is_file():
+    DEFAULT_SCAM_DB_PATH = Path(__file__).with_name("data") / "scam_numbers.db"
 DEFAULT_SCAM_TXT_PATH = REPO_ROOT / "data" / "scam_numbers" / "scam_numbers_e164.txt"
 
 _E164_REGEX = re.compile(r"^\+[1-9]\d{6,14}$")
@@ -53,7 +55,13 @@ def is_scam_number(phone_number: str, db_path: str | Path | None = None) -> bool
     return lookup_scam_number(phone_number, db_path=db_path) is not None
 
 
-def lookup_scam_number(phone_number: str, db_path: str | Path | None = None) -> ScamRecord | None:
+class ScamDatabaseUnavailable(RuntimeError):
+    """The dataset is missing or unreadable, not a negative lookup."""
+
+
+def lookup_scam_number(
+    phone_number: str, db_path: str | Path | None = None, *, strict: bool = False
+) -> ScamRecord | None:
     """Look up a phone number in the scam database.
 
     Returns a ScamRecord if matched, or None otherwise.
@@ -63,11 +71,14 @@ def lookup_scam_number(phone_number: str, db_path: str | Path | None = None) -> 
 
     path = Path(db_path) if db_path else DEFAULT_SCAM_DB_PATH
     if not path.is_file():
+        if strict:
+            raise ScamDatabaseUnavailable("Scam database unavailable")
         return None
 
     normalized = normalize_to_e164(phone_number)
     candidates = [c for c in (phone_number.strip(), normalized) if c]
 
+    conn = None
     try:
         conn = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
         conn.row_factory = sqlite3.Row
@@ -86,13 +97,13 @@ def lookup_scam_number(phone_number: str, db_path: str | Path | None = None) -> 
                         raw_number=row["raw_number"],
                         created_at=row["created_at"],
                     )
-    except sqlite3.Error:
+    except sqlite3.Error as exc:
+        if strict:
+            raise ScamDatabaseUnavailable("Scam database unavailable") from exc
         return None
     finally:
-        try:
+        if conn is not None:
             conn.close()
-        except Exception:
-            pass
 
     return None
 

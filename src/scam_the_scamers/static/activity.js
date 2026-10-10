@@ -4,7 +4,7 @@ const stages = {
   armed: ["Listening", "Waiting for sound", "Quiet"],
   connecting: ["Listening", "Connecting", "Quiet"],
   listening: ["Listening", "Connected", "Quiet"],
-  thinking: ["Listening", "Preparing reply", "Quiet"],
+  thinking: ["Listening", "Assessing", "Quiet"],
   speaking: ["Listening", "Connected", "Playing audio"],
   error: ["Off", "Disconnected", "Quiet"],
 };
@@ -61,15 +61,15 @@ export function showActivityPhase(next, previous) {
   if (next === "armed" && ["off", "error"].includes(previous))
     addActivity("Listener enabled", "Microphone active. Waiting for sound.");
   else if (next === "connecting")
-    addActivity("Sound detected", "Opening the voice connection.");
+    addActivity("Sound detected", "Opening the screening connection.");
   else if (next === "listening" && previous === "connecting")
-    addActivity("Agent connected", "The voice conversation is ready.");
+    addActivity("Screening connected", "Gradium STT is ready. Scores will follow speech.");
   else if (next === "thinking")
-    addActivity("Preparing a reply", "The agent detected the end of a turn.");
+    addActivity("Assessing call", "Gemini is assessing the call context.");
   else if (next === "speaking")
     addActivity(
-      "Agent speaking",
-      "Response audio is playing through your speaker.",
+      "Warning playing",
+      "A caution is playing. Microphone forwarding is briefly suppressed.",
     );
   else if (next === "off" && previous !== "off")
     addActivity("Listener paused", "Microphone and audio playback stopped.");
@@ -97,3 +97,11 @@ viewButtons.forEach((button) => {
   button.addEventListener("click", () => setView(button.dataset.view));
 });
 setView(window.matchMedia("(max-width: 760px)").matches ? "listener" : "split");
+
+export function showTool(event) {
+  const labels = { stt: "Gradium STT", gemini: "Gemini", db: "Number database", tts: "Gradium TTS", resend: "Resend email" };
+  if (!labels[event.tool]) return;
+  $(`tool-${event.tool}`).textContent = event.status.replaceAll("_", " ");
+  $(`tool-${event.tool}`).dataset.status = event.status;
+  addActivity(`${labels[event.tool]} · ${event.status.replaceAll("_", " ")}`, event.detail, event.status === "error" ? "error" : "info");
+}

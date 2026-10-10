@@ -5,44 +5,67 @@ import asyncio
 import json
 import logging
 import sys
-import time
 
 from pydantic import ValidationError
 
-from .agent import GradbotFactory
 from .config import Settings
 
 
-async def check_voice(settings: Settings) -> dict:
-    """Exercise real STT + LLM + TTS startup, without making a telephone call."""
+async def check_providers(settings: Settings) -> dict:
+    """Bounded synthetic probes; never record a person or send an email."""
+    from .caller import CallerLookup
+    from .providers import GeminiClassifier, GradiumSTT, GradiumTTS, ProviderError
+
+    results: dict = {"email": "not tested; doctor never sends email"}
+    samples = {
+        "family_only": "Hi, this is your daughter. Shall we have lunch on Sunday?",
+        "scam_scenario": "Mum, it is your daughter. I have been arrested and I am terrified. "
+        "I need CHF 5,000 in cash within the hour. Do not tell Mum and Dad or anyone else. "
+        "A courier will come to your house to collect the cash for my release.",
+    }
+    for name, sample in samples.items():
+        try:
+            result = await GeminiClassifier(settings).classify(sample, CallerLookup("not_provided"))
+            results[name] = {
+                "overall": result.overall,
+                "criteria": result.criteria.model_dump(),
+                "warning_present": result.warning_text is not None,
+            }
+        except (ProviderError, TimeoutError) as exc:
+            results[name] = str(exc) if isinstance(exc, ProviderError) else "timeout"
     session = None
-    feeder = None
-    started = time.monotonic()
     try:
+        import audioop
+
+        audio = await GradiumTTS(settings).synthesize("This is a synthetic screening audio test.")
+        results["tts"] = {"status": "passed", "pcm_bytes": len(audio)}
+        session = await GradiumSTT.open(settings)
+        pcm, _ = audioop.ratecv(audio, 2, 1, 48000, 24000, None)
+
+        async def feed():
+            assert session is not None
+            for offset in range(0, len(pcm), 3840):
+                await session.send_audio(pcm[offset : offset + 3840])
+                await asyncio.sleep(0.08)
+            await session.finish()
+
+        async def receive():
+            assert session is not None
+            segments = 0
+            while (event := await session.receive()) is not None:
+                if event.kind == "text" and event.text.strip():
+                    segments += 1
+            return segments
+
         async with asyncio.timeout(30):
-            session = await GradbotFactory(settings).open()
-
-            async def feed_silence():
-                while True:
-                    await session.send_audio(b"\xff" * 480)  # 20ms at Gradbot's 24kHz
-                    await asyncio.sleep(0.02)
-
-            feeder = asyncio.create_task(feed_silence())
-            while True:
-                event = await session.receive()
-                if event is None:
-                    raise RuntimeError("Voice provider closed before the first audio")
-                if event.kind == "audio" and event.audio:
-                    return {
-                        "voice_pipeline": "passed",
-                        "first_audio_ms": round((time.monotonic() - started) * 1000),
-                    }
+            _, segments = await asyncio.gather(feed(), receive())
+        results["stt"] = {"status": "passed" if segments else "no transcript", "segments": segments}
+    except Exception as exc:
+        results["gradium"] = str(exc) if isinstance(exc, ProviderError) else type(exc).__name__
     finally:
-        if feeder is not None:
-            feeder.cancel()
-            await asyncio.gather(feeder, return_exceptions=True)
         if session is not None:
             await asyncio.wait_for(session.close(), 3)
+    return results
 
 
 def main() -> None:
@@ -79,9 +102,10 @@ def main() -> None:
             print("Missing configuration: " + ", ".join(missing), file=sys.stderr)
             raise SystemExit(1)
         if args.command == "doctor":
-            print("Configuration valid. This does not verify provider credentials.")
+            print("Screening configuration valid. This does not verify provider credentials.")
+            print("Fallback email: " + settings.email_status() + ". No email sent.")
             if args.live:
-                print(json.dumps(asyncio.run(check_voice(settings)), indent=2))
+                print(json.dumps(asyncio.run(check_providers(settings)), indent=2))
     except ValidationError as exc:
         fields = sorted({str(error["loc"][0]).upper() for error in exc.errors()})
         print("Invalid configuration fields: " + ", ".join(fields), file=sys.stderr)

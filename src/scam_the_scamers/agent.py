@@ -1,106 +1,295 @@
-"""Provider boundary; transport never depends on native SDK message types."""
+"""Per-session screening orchestration with injectable providers and bounded memory."""
 
-import json
-from dataclasses import dataclass
-from typing import Literal, Protocol
+import asyncio
+import time
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass, field
+from typing import Protocol
 
-import gradbot
-
+from .alerts import AlertManager
+from .caller import CallerLookup
 from .config import Settings
+from .providers import (
+    Classifier,
+    Email,
+    GeminiClassifier,
+    GradiumSTT,
+    GradiumTTS,
+    ProviderError,
+    ResendEmail,
+    Speech,
+    STTSession,
+)
+from .risk import Assessment, tier
 
 
 @dataclass(frozen=True)
 class AgentEvent:
-    kind: Literal["audio", "interrupt", "turn_end", "activity"]
+    payload: dict = field(default_factory=dict)
     audio: bytes = b""
 
 
 class AgentSession(Protocol):
     async def send_audio(self, audio: bytes) -> None: ...
     async def receive(self) -> AgentEvent | None: ...
+    async def finish(self) -> None: ...
+    async def cancel_warning(self) -> None: ...
     async def close(self) -> None: ...
 
 
 class AgentFactory(Protocol):
-    async def open(self) -> AgentSession: ...
+    async def open(self, caller: CallerLookup, session_id: str) -> AgentSession: ...
 
 
-def session_config(settings: Settings) -> gradbot.SessionConfig:
-    languages = {
-        "de": "German",
-        "en": "English",
-        "fr": "French",
-        "es": "Spanish",
-        "pt": "Portuguese",
-    }
-    instructions = (
-        f"You are the AI assistant for {settings.operator_name}, running on a laptop "
-        "next to a phone on speaker. You hear the conversation through the laptop microphone "
-        "and your voice plays through the laptop speakers. "
-        f"Speak {languages[settings.agent_language]}. Speak first: briefly greet the caller, "
-        "explicitly introduce yourself as an AI assistant acting for the owner, "
-        "and ask how you can help. Use one or two short natural sentences at a time. "
-        "Ask one question at a time. Listen when interrupted. "
-        "Help with simple questions and clarify why the caller called. "
-        "You have no access to the owner's calendar, messages or private information. "
-        "Do not invent facts, make commitments or claim to save or deliver messages. "
-        "You cannot detect, answer, transfer or hang up a phone call. "
-        "If asked, explain that this is a conversation prototype. Never claim to be the owner."
-    )
-    return gradbot.SessionConfig(
-        voice_id=settings.gradium_voice_id or None,
-        instructions=instructions,
-        language=getattr(gradbot.Lang, settings.agent_language.capitalize()),
-        assistant_speaks_first=True,
-        silence_timeout_s=settings.silence_timeout_seconds,
-        flush_duration_s=0.5,
-        stt_extra_config=json.dumps({"padding_bonus": 1.0}),
-        tools=[],
-    )
+class TranscriptBuffer:
+    def __init__(self, limit: int):
+        self.limit, self.text, self.truncated = limit, "", False
+
+    def append(self, text: str) -> bool:
+        text = text.strip()
+        if not text:
+            return False
+        joined = f"{self.text} {text}".strip()
+        if len(joined) > self.limit:
+            self.truncated = True
+            prefix = self.limit // 3
+            joined = joined[:prefix] + " [context clipped] " + joined[-(self.limit - prefix - 19) :]
+        self.text = joined
+        return True
 
 
-class GradbotSession:
-    def __init__(self, input_handle, output_handle):
-        self._input = input_handle
-        self._output = output_handle
+class ScreeningSession:
+    def __init__(
+        self,
+        settings: Settings,
+        stt: STTSession,
+        classifier: Classifier,
+        speech: Speech,
+        email: Email,
+        caller: CallerLookup,
+        session_id: str,
+    ):
+        self.settings, self.stt, self.classifier, self.speech = settings, stt, classifier, speech
+        self.caller = caller
+        self.events: asyncio.Queue[AgentEvent | Exception | None] = asyncio.Queue(maxsize=64)
+        self.transcript = TranscriptBuffer(settings.transcript_max_chars)
+        self.changed = asyncio.Event()
+        self.stt_done = asyncio.Event()
+        self.assessed = asyncio.Event()
+        self.revision = 0
+        self.last_revision = 0
+        self.latest: Assessment | None = None
+        self.warning_attempted = 0
+        self.suppressed_until = 0.0
+        self.warning_generation = 0
+        self.warning_queue: asyncio.Queue[Assessment] = asyncio.Queue(maxsize=1)
+        self.alerts = AlertManager(settings, email, session_id, self.activity)
+        self.closed = False
+        self.tasks = [
+            asyncio.create_task(self._guard(coro))
+            for coro in (
+                self._transcribe(),
+                self._classify(),
+                self._warn(),
+                self.alerts.run(),
+            )
+        ]
+
+    async def _guard(self, coro: Awaitable[None]) -> None:
+        try:
+            await coro
+        except Exception as exc:
+            await self.events.put(exc)
+
+    async def activity(self, tool: str, status: str, detail: str) -> None:
+        await self.events.put(
+            AgentEvent({"event": "tool", "tool": tool, "status": status, "detail": detail})
+        )
 
     async def send_audio(self, audio: bytes) -> None:
-        await self._input.send_audio(audio)
+        # Keep the clock moving with silence during warnings; never replay buffered echo.
+        if time.monotonic() < self.suppressed_until:
+            audio = bytes(len(audio))
+        await self.stt.send_audio(audio)
 
     async def receive(self) -> AgentEvent | None:
-        msg = await self._output.receive()
-        if msg is None:
-            return None
-        if msg.msg_type == "audio":
-            if msg.interrupted:
-                return AgentEvent("interrupt")
-            return AgentEvent("audio", bytes(msg.data))
-        if msg.msg_type == "event" and msg.event.event_type == "interrupted":
-            return AgentEvent("interrupt")
-        if msg.msg_type == "event" and msg.event.event_type == "end_of_turn":
-            return AgentEvent("turn_end")
-        # Transcript contents deliberately never enter the transport logs.
-        return AgentEvent("activity")
+        event = await self.events.get()
+        if isinstance(event, Exception):
+            raise event
+        return event
+
+    async def _transcribe(self) -> None:
+        await self.activity(
+            "stt", "streaming", "Gradium STT connected; streaming microphone audio."
+        )
+        while True:
+            event = await asyncio.wait_for(
+                self.stt.receive(), self.settings.provider_idle_timeout_seconds
+            )
+            if event is None:
+                self.stt_done.set()
+                return
+            if event.kind == "text" and self.transcript.append(event.text):
+                self.revision += 1
+                self.assessed.clear()
+                self.changed.set()
+            # end_text closes a segment; it is not another text chunk. flushed is an
+            # acknowledgement, not permission to discard the accumulated conversation.
+
+    async def _classify(self) -> None:
+        last_started = 0.0
+        while True:
+            await self.changed.wait()
+            delay = max(
+                0.0,
+                self.settings.classification_interval_seconds - (time.monotonic() - last_started),
+            )
+            if delay:
+                await asyncio.sleep(delay)
+            self.changed.clear()
+            revision, text = self.revision, self.transcript.text
+            last_started = time.monotonic()
+            await self.activity("gemini", "assessing", "Assessing accumulated call context.")
+            try:
+                async with asyncio.timeout(self.settings.request_timeout_seconds):
+                    assessment = await self.classifier.classify(text, self.caller)
+            except (ProviderError, ValueError, TimeoutError):
+                self.latest = None
+                await self.events.put(
+                    AgentEvent({"event": "assessment_unavailable", "revision": revision})
+                )
+                await self.activity(
+                    "gemini", "error", "Assessment unavailable. No score or warning fabricated."
+                )
+            else:
+                # One classifier request at a time; revisions can never arrive out of order.
+                self.latest = assessment
+                await self.events.put(
+                    AgentEvent(
+                        {
+                            "event": "assessment",
+                            "revision": revision,
+                            **assessment.model_dump(),
+                            "context_truncated": self.transcript.truncated,
+                        }
+                    )
+                )
+                await self.activity(
+                    "gemini", "complete", "Six criteria assessed; screening indicator updated."
+                )
+                await self.alerts.consider(assessment, self.caller)
+                if self.warning_queue.full():
+                    self.warning_queue.get_nowait()
+                    self.warning_queue.task_done()
+                self.warning_queue.put_nowait(assessment)
+            self.last_revision = revision
+            if revision == self.revision:
+                self.assessed.set()
+
+    async def _warn(self) -> None:
+        while True:
+            assessment = await self.warning_queue.get()
+            try:
+                level = max(1, tier(assessment.overall))
+                if (
+                    not assessment.warning_text
+                    or assessment.overall < self.settings.warning_threshold
+                    or level <= self.warning_attempted
+                ):
+                    continue
+                self.warning_attempted = level
+                generation = self.warning_generation
+                await self.activity(
+                    "tts", "synthesizing", "Gradium TTS is synthesizing an eligible caution."
+                )
+                try:
+                    async with asyncio.timeout(self.settings.request_timeout_seconds):
+                        audio = await self.speech.synthesize(assessment.warning_text)
+                    if not audio or len(audio) % 2 or len(audio) > 12 * 96000:
+                        raise ProviderError("tts", "invalid_audio")
+                except (ProviderError, TimeoutError):
+                    await self.activity(
+                        "tts", "error", "Warning audio unavailable; scores remain visible."
+                    )
+                    continue
+                if (
+                    generation != self.warning_generation
+                    or self.latest is None
+                    or self.latest.overall < self.settings.warning_threshold
+                ):
+                    await self.activity("tts", "cancelled", "Outdated warning discarded.")
+                    continue
+                duration = len(audio) / 96000
+                self.suppressed_until = time.monotonic() + duration + 1
+                await self.events.put(
+                    AgentEvent(
+                        {
+                            "event": "warning",
+                            "text": assessment.warning_text,
+                            "duration_seconds": duration,
+                        },
+                        audio,
+                    )
+                )
+                await self.activity(
+                    "tts",
+                    "ready",
+                    "Warning audio sent to browser; playback depends on browser audio.",
+                )
+                # Bound warning cadence and prevent a second warning overlapping playback.
+                await asyncio.sleep(duration + 1)
+            finally:
+                self.warning_queue.task_done()
+
+    async def cancel_warning(self) -> None:
+        self.warning_generation += 1
+        # A short tail protects against sound already emitted by laptop speakers.
+        self.suppressed_until = time.monotonic() + 0.5
+        await self.events.put(AgentEvent({"event": "clear"}))
+        await self.activity("tts", "cancelled", "Warning cancelled by listener.")
+
+    async def finish(self) -> None:
+        # End-session drains STT; pause/disconnect cancels immediately via close().
+        await self.stt.finish()
+        await self.stt_done.wait()
+        if self.revision > self.last_revision:
+            await self.assessed.wait()
+        await self.alerts.pending.join()
+        await self.warning_queue.join()
+        await self.events.put(None)
 
     async def close(self) -> None:
-        await self._input.close()
+        if self.closed:
+            return
+        self.closed = True
+        for task in self.tasks:
+            task.cancel()
+        await asyncio.gather(*self.tasks, return_exceptions=True)
+        await self.stt.close()
+        self.transcript.text = ""
+        self.latest = None
+        while not self.events.empty():
+            self.events.get_nowait()
 
 
-class GradbotFactory:
-    def __init__(self, settings: Settings):
+class ScreeningFactory:
+    def __init__(
+        self,
+        settings: Settings,
+        *,
+        stt_open: Callable[[], Awaitable[STTSession]] | None = None,
+        classifier: Classifier | None = None,
+        speech: Speech | None = None,
+        email: Email | None = None,
+    ):
         self.settings = settings
+        self.stt_open = stt_open or (lambda: GradiumSTT.open(settings))
+        self.classifier = classifier or GeminiClassifier(settings)
+        self.speech = speech or GradiumTTS(settings)
+        self.email = email or ResendEmail(settings)
 
-    async def open(self) -> AgentSession:
-        settings = self.settings
-        input_handle, output_handle = await gradbot.run(
-            gradium_api_key=settings.value("gradium_api_key"),
-            gradium_base_url=settings.gradium_base_url or None,
-            llm_api_key=settings.value("llm_api_key"),
-            llm_base_url=settings.llm_base_url,
-            llm_model_name=settings.llm_model,
-            max_completion_tokens=180,
-            session_config=session_config(settings),
-            input_format=gradbot.AudioFormat.Ulaw,
-            output_format=gradbot.AudioFormat.Ulaw,
+    async def open(self, caller: CallerLookup, session_id: str) -> AgentSession:
+        stt = await self.stt_open()
+        return ScreeningSession(
+            self.settings, stt, self.classifier, self.speech, self.email, caller, session_id
         )
-        return GradbotSession(input_handle, output_handle)

@@ -11,7 +11,7 @@
   <body>
     <header>
       <a class="brand" href="/" aria-label="Scam the Scamers home"
-        ><span class="brand-icon">◉</span> scam the scamers<span
+        ><span class="brand-icon">◉</span> Scam the Scamers<span
           class="brand-tag"
           >LISTENER</span
         ></a
@@ -19,11 +19,11 @@
     </header>
     <main>
       <div class="intro">
-        <p class="eyebrow">A LISTENING EAR. A VOICE BY YOUR SIDE.</p>
-        <h1>Listen. See what happens.</h1>
+        <p class="eyebrow">A LISTENING EAR. A MOMENT TO THINK.</p>
+        <h1>Listen with a little backup.</h1>
         <p>
-          Your voice agent on one side. Every step of the conversation on the
-          other.
+          Spot warning signs as you talk. Keep your phone on speaker and your
+          laptop nearby.
         </p>
       </div>
       <div class="workspace-toolbar">
@@ -60,7 +60,7 @@
           <div class="panel-heading">
             <span>01 / LISTENER</span><span>LIVE AUDIO</span>
           </div>
-          <section class="listener-card" aria-label="Voice assistant">
+          <section class="listener-card" aria-label="Call screening listener">
             <div class="card-top">
               <span
                 ><i id="status-dot"></i
@@ -80,13 +80,22 @@
                 Enable your microphone to get the listener ready.
               </p>
             </div>
+            <div class="call-settings">
+              <label for="caller-number">Caller number <span>(optional)</span></label>
+              <input id="caller-number" type="tel" maxlength="64" autocomplete="off"
+                placeholder="+41 79 123 45 67" aria-describedby="caller-help" />
+              <p id="caller-help">Enter an international number, or a Swiss local number. The microphone cannot detect caller ID.</p>
+              <p id="fallback-status" role="status">Checking fallback email configuration…</p>
+              <p class="provider-note">During screening, Gradium transcribes audio and Gemini assesses the text. Configured fallback alerts send a risk summary via Resend.</p>
+            </div>
             <button id="toggle" class="primary" disabled>
               <span id="toggle-icon" aria-hidden="true">◉</span
               ><span id="toggle-label">Getting ready …</span>
             </button>
             <button id="end-session" class="text-button" hidden>
-              End conversation · keep listening
+              End screening · keep listening
             </button>
+            <button id="cancel-warning" class="text-button" hidden>Stop warning audio</button>
             <p id="error" class="error" role="alert" hidden></p>
             <div class="meter-row">
               <span>MICROPHONE</span>
@@ -106,7 +115,7 @@
           </section>
           <section class="settings" aria-label="Listener settings">
             <div>
-              <label for="sensitivity">When should the agent start?</label>
+              <label for="sensitivity">When should screening start?</label>
               <p>
                 Automatically, when the sound briefly exceeds the threshold.
               </p>
@@ -134,13 +143,23 @@
           <div class="activity-card">
             <div class="activity-heading">
               <div>
-                <p class="eyebrow">BEHIND THE CONVERSATION</p>
+                <p class="eyebrow">LIVE SCREENING</p>
                 <h2 id="tools-title">Tools &amp; activity</h2>
               </div>
               <span id="activity-status" class="activity-status" role="status"
                 >Standby</span
               >
             </div>
+            <section id="risk-panel" class="risk-panel" data-risk="unavailable" aria-label="Live risk scores">
+              <div class="risk-heading"><div><span>OVERALL RISK INDICATOR</span>
+                <strong id="overall-score">—</strong></div><span id="risk-level">Waiting</span></div>
+              <p id="assessment-status" role="status">Waiting for speech and a valid assessment.</p>
+              <div id="criteria-scores"></div>
+              <p class="rubric-note">Evidence indicators, not a probability or proof of fraud. A family claim alone contributes at most 5 points.</p>
+              <details><summary>How scores work</summary>
+                <p>Each criterion: 0 absent, 25 ambiguous, 50 plausible, 75 strong, 100 explicit evidence. Overall weights: family 5%, distress 10%, urgency 20%, secrecy 20%, financial request 25%, courier 20%. Below 50 green; 50 caution (amber); 75 high (red); 90 critical. Mistakes are possible. Verify independently.</p>
+              </details>
+            </section>
             <div class="pipeline" aria-label="Current audio status">
               <div id="microphone-stage" data-active="false">
                 <span class="stage-number">01</span>
@@ -149,7 +168,7 @@
               </div>
               <div id="agent-stage" data-active="false">
                 <span class="stage-number">02</span>
-                <h3>Voice agent</h3>
+                <h3>Screening</h3>
                 <p id="agent-status">Disconnected</p>
               </div>
               <div id="speaker-stage" data-active="false">
@@ -159,20 +178,16 @@
               </div>
             </div>
             <div class="tools-section">
-              <div class="section-heading">
-                <h3>Connected tools</h3>
-                <span class="count-badge">0</span>
-              </div>
-              <div class="tools-empty">
-                <span class="tools-symbol" aria-hidden="true">⌘</span>
-                <div>
-                  <strong>No tools connected yet</strong>
-                  <p>
-                    When tools are connected, this space will show their calls
-                    and results.
-                  </p>
-                </div>
-              </div>
+              <div class="section-heading"><h3>Provider &amp; tool status</h3></div>
+              <dl class="tool-statuses">
+                <div><dt>Gradium STT</dt><dd id="tool-stt">Idle</dd></div>
+                <div><dt>Gemini</dt><dd id="tool-gemini">Waiting for transcript</dd></div>
+                <div><dt>Number database</dt><dd id="tool-db">Not checked</dd></div>
+                <div><dt>Gradium TTS</dt><dd id="tool-tts">No warning requested</dd></div>
+                <div><dt>Resend email</dt><dd id="tool-resend">Checking configuration</dd></div>
+              </dl>
+              <p id="caller-result" class="rubric-note">No number checked. A missing match never proves safety.</p>
+              <p id="warning-text" role="status" hidden></p>
             </div>
             <div class="activity-section">
               <div class="section-heading">
@@ -187,7 +202,7 @@
                 </button>
               </div>
               <p id="activity-empty" class="activity-empty">
-                Enable the listener to see the conversation unfold here.
+                Enable the listener to see actual screening activity here.
               </p>
               <ol
                 id="activity-log"
@@ -220,14 +235,13 @@
         <div>
           <span>03</span>
           <p>
-            <strong>Let the conversation flow</strong>Sound activates the agent,
-            and it responds out loud.
+            <strong>Let the conversation flow</strong>Sound starts screening. Scores update quietly; eligible cautions play aloud.
           </p>
         </div>
       </div>
       <p class="privacy-note">
         While waiting, audio stays in your browser. During a conversation, the
-        AI providers process speech. The app does not save recordings.
+        AI providers process audio and text. The app does not save recordings or transcripts.
       </p>
     </main>
     <footer>
