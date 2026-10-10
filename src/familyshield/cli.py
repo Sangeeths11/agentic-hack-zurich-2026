@@ -2,9 +2,11 @@
 
 import argparse
 import asyncio
+import csv
 import json
 import logging
 import re
+import sqlite3
 import sys
 import time
 from pathlib import Path
@@ -61,6 +63,51 @@ async def check_voice(settings: Settings) -> dict:
             await asyncio.wait_for(session.close(), 3)
 
 
+def import_contacts(settings: Settings, path: Path) -> None:
+    """Bulk-enroll from a CSV with columns name,phone,relationship,role (the
+    last two optional). Bad or duplicate rows are skipped and reported —
+    one bad line shouldn't lose the rest of the household's directory.
+    """
+    from .contacts import add_contact
+
+    if not path.is_file():
+        raise OperatorError(f"No such file: {path}")
+    with path.open(newline="", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        if not {"name", "phone"}.issubset(set(reader.fieldnames or [])):
+            raise OperatorError("CSV must have at least 'name' and 'phone' columns")
+        added = 0
+        skipped: list[str] = []
+        for line_no, row in enumerate(reader, start=2):  # header is line 1
+            name = (row.get("name") or "").strip()
+            phone = (row.get("phone") or "").strip()
+            relationship = (row.get("relationship") or "").strip()
+            role = (row.get("role") or "relative").strip() or "relative"
+            if not name:
+                skipped.append(f"line {line_no}: empty name")
+            elif not re.fullmatch(r"\+[1-9]\d{7,14}", phone):
+                skipped.append(f"line {line_no}: phone must be E.164, got {phone!r}")
+            elif role not in {"relative", "caregiver"}:
+                skipped.append(f"line {line_no}: role must be relative or caregiver, got {role!r}")
+            else:
+                try:
+                    add_contact(
+                        settings.contacts_db_path,
+                        name=name,
+                        phone_number=phone,
+                        relationship=relationship,
+                        role=role,
+                    )
+                    added += 1
+                except sqlite3.IntegrityError:
+                    skipped.append(f"line {line_no}: duplicate phone {phone}")
+    print(f"Imported {added} contact(s).")
+    if skipped:
+        print(f"Skipped {len(skipped)} row(s):", file=sys.stderr)
+        for reason in skipped:
+            print(f"  {reason}", file=sys.stderr)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Family Shield streaming phone assistant")
     commands = parser.add_subparsers(dest="command", required=True)
@@ -79,6 +126,10 @@ def main() -> None:
     add_contact_cmd.add_argument("--relationship", default="")
     add_contact_cmd.add_argument("--role", default="relative", choices=["relative", "caregiver"])
     contacts_sub.add_parser("list", help="List enrolled contacts")
+    import_contacts_cmd = contacts_sub.add_parser(
+        "import", help="Bulk-enroll contacts from a CSV file (see contacts.example.csv)"
+    )
+    import_contacts_cmd.add_argument("path", type=Path)
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     # Twilio/httpx INFO logs can contain phone numbers or account URLs.
@@ -120,6 +171,8 @@ def main() -> None:
                     role=args.role,
                 )
                 print(f"Added contact #{contact.id}: {contact.name} ({contact.role})")
+            elif args.contacts_command == "import":
+                import_contacts(settings, args.path)
             else:
                 for contact in list_contacts(settings.contacts_db_path):
                     print(

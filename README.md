@@ -69,6 +69,23 @@ Zugangsdaten. Sie sind aus der aktuellen Vorlage entfernt. Den bisherigen
 Twilio Auth Token im Anbieter-Konto ersetzen; das entfernt ihn nicht aus
 alten Git-Commits. Die neue `.env` wird nicht versioniert.
 
+## 2b. Kontakte eintragen
+
+Eingehende Anrufe werden gegen ein lokales SQLite-Verzeichnis
+(`CONTACTS_DB_PATH`, Standard `familyshield.db`) und eine Twilio-Lookup-Abfrage
+geprüft (Leitungstyp, Anbieter). Ein unbekannter Anrufer erhöht den laufenden
+Risiko-Score (siehe unten); bekannte Kontakte starten bei null.
+
+```bash
+uv run familyshield contacts add --name "Sarah" --phone "+41790000001" \
+  --relationship daughter --role caregiver
+uv run familyshield contacts list
+uv run familyshield contacts import contacts.example.csv   # CSV: name,phone,relationship,role
+```
+
+Fehlerhafte oder doppelte Zeilen beim Import werden einzeln übersprungen und
+mit Zeilennummer gemeldet; der Rest der Datei wird trotzdem importiert.
+
 ## 3. Echten Telefonanruf verbinden
 
 Nach `scripts/setup.sh` und Eintragen der Keys:
