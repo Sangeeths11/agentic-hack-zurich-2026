@@ -114,7 +114,7 @@ and [Entire quickstart](https://docs.entire.io/quickstart). Each teammate needs 
 
 1. Install the Entire CLI using its official installer and run `entire login`.
 2. Connect their GitHub account in Entire. The repository owner/admin must give
-   the Entire GitHub App access to `simonthor/agentic-hack-zurich-2026` and import
+   the Entire GitHub App access to `Sangeeths11/agentic-hack-zurich-2026` and import
    that repository. Existing GitHub collaborator permissions determine access.
 3. Install local hooks from this checkout:
 
