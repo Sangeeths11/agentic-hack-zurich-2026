@@ -1,22 +1,3 @@
-These things need to be improved with the current web page:
-
-- Make the phone number lookup work. It is currently not warning for scam phone numbers saved in the database in data/
-- The scoring works but sometimes the scoring does not reflect the true severity (e.g. if one flag is very worrying but not other ones). Even if the score does not trigger a warning, if Gemini thinks it is a scam, it should still make a warning. Gemini should use the full context of the conversation.
-- Make the score additive instead of taking an average
-- Add a live view of which tools are being called inside the UI. For example, if Gradium is currently being called, it should be highlighted. Make a graph display of this with the backend, Gradium API, Gemini API, scoring, etc. Visualize it in a clean UI.
-- Whenever the call is flagged, make the background of the whole scoring part orange or red, depending on the severity
-- Add a view of the transcript in the frontend
-
-\- Show a notification banner when a guardian alert is sent: "Guardian alerted at [time] — [alert level]"
-
-Create a new branch, and this is the fixed stuff you need to do. Just check, please use it entirely, very correctly, and usefully, like how the hackathon wants. Use your sub-agents to work quickly, correctly, and faster, and implement all the features that we mentioned above.
-
-
-
-[https://entire.io/gh/Sangeeths11/agentic-hack-zurich-2026](https://entire.io/gh/Sangeeths11/agentic-hack-zurich-2026)
-
----
-
 Prompt 3:
 
 Use the callmebot API to send a whatsapp message to the guardian when the call is flagged as dangerous. The guardian phone number should be configurable in the web UI. The API for callmebot is:
