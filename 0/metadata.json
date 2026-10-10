@@ -1,0 +1,66 @@
+{
+  "cli_version": "0.11.4",
+  "checkpoint_id": "01M4K25QB249AHSPK2JWDXPECP",
+  "session_id": "01a1261b-5389-7422-b1e5-86a56453df2a",
+  "strategy": "manual-commit",
+  "created_at": "2026-10-10T14:06:23.377545Z",
+  "branch": "feat/live-screening-alerts",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "docs/live-scam-screening-evidence.md",
+    "src/scam_the_scamers/agent.py",
+    "src/scam_the_scamers/alerts.py",
+    "src/scam_the_scamers/bridge.py",
+    "src/scam_the_scamers/caller.py",
+    "src/scam_the_scamers/main.py",
+    "src/scam_the_scamers/risk.py",
+    "src/scam_the_scamers/static/activity.js",
+    "src/scam_the_scamers/static/index.html",
+    "src/scam_the_scamers/static/listener.css",
+    "src/scam_the_scamers/static/listener.js",
+    "src/scam_the_scamers/static/screening.js",
+    "tests/browser_listener.py",
+    "tests/live_browser_listener.py",
+    "tests/support.py",
+    "tests/test_agent.py",
+    "tests/test_alerts.py",
+    "tests/test_browser_audio.mjs",
+    "tests/test_lifecycle.py",
+    "tests/test_listener.py",
+    "tests/test_providers.py",
+    "tests/test_scam_db.py"
+  ],
+  "agent": "Codex",
+  "model": "gpt-6-astra",
+  "turn_id": "175c1d2eb96c",
+  "compact_transcript_start": 0,
+  "token_usage": {
+    "input_tokens": 139610,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 5233152,
+    "output_tokens": 15668,
+    "api_call_count": 62,
+    "subagent_tokens_complete": false
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-10-10T14:06:23.316666Z",
+    "agent_lines": 1049,
+    "agent_removed": 109,
+    "human_added": 85,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 1134,
+    "total_lines_changed": 1282,
+    "agent_percentage": 90.32761310452419,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 1,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0
+    }
+  ]
+}

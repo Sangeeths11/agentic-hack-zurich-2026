@@ -1,0 +1,48 @@
+{
+  "cli_version": "0.11.4",
+  "checkpoint_id": "01M4K25QB249AHSPK2JWDXPECP",
+  "strategy": "manual-commit",
+  "branch": "feat/live-screening-alerts",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "docs/live-scam-screening-evidence.md",
+    "src/scam_the_scamers/agent.py",
+    "src/scam_the_scamers/alerts.py",
+    "src/scam_the_scamers/bridge.py",
+    "src/scam_the_scamers/caller.py",
+    "src/scam_the_scamers/main.py",
+    "src/scam_the_scamers/risk.py",
+    "src/scam_the_scamers/static/activity.js",
+    "src/scam_the_scamers/static/index.html",
+    "src/scam_the_scamers/static/listener.css",
+    "src/scam_the_scamers/static/listener.js",
+    "src/scam_the_scamers/static/screening.js",
+    "tests/browser_listener.py",
+    "tests/live_browser_listener.py",
+    "tests/support.py",
+    "tests/test_agent.py",
+    "tests/test_alerts.py",
+    "tests/test_browser_audio.mjs",
+    "tests/test_lifecycle.py",
+    "tests/test_listener.py",
+    "tests/test_providers.py",
+    "tests/test_scam_db.py"
+  ],
+  "sessions": [
+    {
+      "metadata": "/0/metadata.json",
+      "transcript": "/0/full.jsonl",
+      "compact_transcript": "/0/transcript.jsonl",
+      "content_hash": "/0/content_hash.txt",
+      "prompt": "/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 139610,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 5233152,
+    "output_tokens": 15668,
+    "api_call_count": 62,
+    "subagent_tokens_complete": false
+  }
+}
