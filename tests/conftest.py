@@ -1,6 +1,6 @@
 import pytest
 
-from familyshield.config import Settings
+from scam_the_scamers.config import Settings
 
 
 @pytest.fixture(autouse=True)

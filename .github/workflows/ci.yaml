@@ -1,4 +1,4 @@
-name: Verify voice bridge
+name: Verify Scam the Scamers
 on: [push, pull_request]
 permissions:
   contents: read
@@ -12,22 +12,13 @@ jobs:
           version: "0.9.16"
           python-version: "3.12"
           enable-cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
       - run: uv sync --frozen
-      - run: uv run ruff check src tests scripts
-      - run: uv run ruff format --check src tests scripts
+      - run: uv run ruff check src tests
+      - run: uv run ruff format --check src tests
       - run: uv run mypy src
       - run: uv run pytest -q
-      - run: uv run familyshield simulate
+      - run: node --test tests/test_browser_audio.mjs
       - run: uv build
-      - run: docker build -t familyshield:test .
-      - name: Container health smoke test
-        run: |
-          docker run -d --name voice-test -p 127.0.0.1:8082:8082 familyshield:test
-          for attempt in {1..20}; do
-            if curl -fsS http://127.0.0.1:8082/healthz; then exit 0; fi
-            sleep 1
-          done
-          docker logs voice-test
-          exit 1
-      - if: always()
-        run: docker rm -f voice-test || true

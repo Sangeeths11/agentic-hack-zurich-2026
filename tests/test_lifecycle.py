@@ -1,75 +1,74 @@
 import asyncio
-import base64
+import audioop
 
 import pytest
 from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
-
-from familyshield.agent import AgentEvent
-from familyshield.main import create_app
-from familyshield.security import stream_ticket
-from familyshield.simulation import (
-    CALL_SID,
-    STREAM_SID,
+from support import (
+    LOCAL_HEADERS,
+    LOCAL_URL,
     DemoFactory,
     DemoSession,
-    signature,
+    microphone_audio,
     simulate,
     simulation_settings,
     start_message,
-    tone,
 )
 
+from scam_the_scamers.agent import AgentEvent
+from scam_the_scamers.main import create_app
 
-def test_full_offline_call_and_interrupt(tmp_path):
+
+def test_full_offline_session_and_interrupt(tmp_path):
     result = simulate(tmp_path / "test.wav")
     assert result["result"] == "passed"
     assert result["interruption"] == "passed"
-    assert (tmp_path / "test.wav").stat().st_size > 3000
+    assert (tmp_path / "test.wav").stat().st_size > 19000
 
 
 def drain_greeting(ws):
     for _ in range(5):
-        assert ws.receive_json()["event"] == "media"
+        assert len(ws.receive_bytes()) == 1920
 
 
-def test_two_parallel_calls_are_isolated_and_third_is_rejected():
-    settings = simulation_settings(max_concurrent_calls=2)
+def start(ws):
+    ws.send_json(start_message())
+    assert ws.receive_json()["event"] == "ready"
+    drain_greeting(ws)
+
+
+def test_parallel_sessions_are_isolated_and_capacity_recovers():
     factory = DemoFactory()
-    app = create_app(settings, factory)
-    headers = signature(settings, "/twilio/stream", websocket=True)
-    call2, stream2 = "CA" + "4" * 32, "MZ" + "5" * 32
-    with TestClient(app) as client:
-        with client.websocket_connect("/twilio/stream", headers=headers) as first:
-            first.send_json(start_message(stream_ticket(settings, CALL_SID)))
-            drain_greeting(first)
-            with client.websocket_connect("/twilio/stream", headers=headers) as second:
-                second.send_json(start_message(stream_ticket(settings, call2), call2, stream2))
-                drain_greeting(second)
+    app = create_app(simulation_settings(max_concurrent_sessions=2), factory)
+    with TestClient(app, base_url=LOCAL_URL) as client:
+        with client.websocket_connect(
+            "ws://localhost:8082/audio/stream", headers=LOCAL_HEADERS
+        ) as first:
+            start(first)
+            with client.websocket_connect(
+                "ws://localhost:8082/audio/stream", headers=LOCAL_HEADERS
+            ) as second:
+                start(second)
                 with pytest.raises(WebSocketDisconnect):
-                    with client.websocket_connect("/twilio/stream", headers=headers):
+                    with client.websocket_connect(
+                        "ws://localhost:8082/audio/stream", headers=LOCAL_HEADERS
+                    ):
                         pass
-                first.send_json(
-                    {
-                        "event": "media",
-                        "streamSid": STREAM_SID,
-                        "media": {
-                            "track": "inbound",
-                            "payload": base64.b64encode(tone(8000)).decode(),
-                        },
-                    }
-                )
+                first.send_bytes(microphone_audio())
                 assert first.receive_json()["event"] == "clear"
+                assert first.receive_json()["event"] == "thinking"
                 drain_greeting(first)
-                assert len(factory.sessions[0].received) == 1
+                assert factory.sessions[0].received == [audioop.lin2ulaw(microphone_audio(), 2)]
                 assert not factory.sessions[1].received
-                first.send_json({"event": "stop", "streamSid": STREAM_SID})
-                assert first.receive()["type"] == "websocket.close"
-                second.send_json({"event": "stop", "streamSid": stream2})
-                assert second.receive()["type"] == "websocket.close"
-        assert all(session.closed for session in factory.sessions)
-        assert not app.state.registry.sockets
-        assert not app.state.registry.calls
+                for ws in (first, second):
+                    ws.send_json({"event": "stop"})
+                    assert ws.receive()["code"] == 1000
+        with client.websocket_connect(
+            "ws://localhost:8082/audio/stream", headers=LOCAL_HEADERS
+        ) as third:
+            start(third)
+    assert all(session.closed for session in factory.sessions)
+    assert not app.state.registry.sockets
 
 
 class BrokenFactory:
@@ -78,21 +77,15 @@ class BrokenFactory:
 
 
 def test_provider_start_failure_releases_capacity(caplog):
-    settings = simulation_settings(max_concurrent_calls=1)
-    app = create_app(settings, BrokenFactory())
-    with TestClient(app) as client:
+    app = create_app(simulation_settings(), BrokenFactory())
+    with TestClient(app, base_url=LOCAL_URL) as client:
         with client.websocket_connect(
-            "/twilio/stream",
-            headers=signature(
-                settings,
-                "/twilio/stream",
-                websocket=True,
-            ),
+            "ws://localhost:8082/audio/stream", headers=LOCAL_HEADERS
         ) as ws:
-            ws.send_json(start_message(stream_ticket(settings, CALL_SID)))
+            ws.send_json(start_message())
             assert ws.receive()["code"] == 1011
-        assert not app.state.registry.sockets
-        assert "Sensitive upstream" not in caplog.text
+    assert not app.state.registry.sockets
+    assert "Sensitive upstream" not in caplog.text
 
 
 class SilentSession(DemoSession):
@@ -117,48 +110,33 @@ class SessionFactory:
 
 
 @pytest.mark.parametrize("session_type", [SilentSession, ActivityWithoutAudioSession])
-def test_first_audio_watchdog_even_when_provider_sends_activity(session_type):
-    settings = simulation_settings(first_audio_timeout_seconds=1)
+def test_first_audio_watchdog_even_with_activity(session_type):
     factory = SessionFactory(session_type)
-    app = create_app(settings, factory)
-    with TestClient(app) as client:
+    app = create_app(simulation_settings(first_audio_timeout_seconds=1), factory)
+    with TestClient(app, base_url=LOCAL_URL) as client:
         with client.websocket_connect(
-            "/twilio/stream",
-            headers=signature(
-                settings,
-                "/twilio/stream",
-                websocket=True,
-            ),
+            "ws://localhost:8082/audio/stream", headers=LOCAL_HEADERS
         ) as ws:
-            ws.send_json(start_message(stream_ticket(settings, CALL_SID)))
+            ws.send_json(start_message())
+            assert ws.receive_json()["event"] == "ready"
             assert ws.receive()["code"] == 1011
-        assert factory.session.closed
-        assert not app.state.registry.sockets
+    assert factory.session.closed
+    assert not app.state.registry.sockets
 
 
-def test_malformed_audio_ends_only_this_call_and_closes_provider():
-    settings = simulation_settings()
+@pytest.mark.parametrize("audio", [b"", b"odd", b"\0" * 9602], ids=["empty", "odd", "oversized"])
+def test_malformed_audio_closes_provider(audio):
     factory = DemoFactory()
-    with TestClient(create_app(settings, factory)) as client:
+    app = create_app(simulation_settings(), factory)
+    with TestClient(app, base_url=LOCAL_URL) as client:
         with client.websocket_connect(
-            "/twilio/stream",
-            headers=signature(
-                settings,
-                "/twilio/stream",
-                websocket=True,
-            ),
+            "ws://localhost:8082/audio/stream", headers=LOCAL_HEADERS
         ) as ws:
-            ws.send_json(start_message(stream_ticket(settings, CALL_SID)))
-            drain_greeting(ws)
-            ws.send_json(
-                {
-                    "event": "media",
-                    "streamSid": STREAM_SID,
-                    "media": {"track": "inbound", "payload": "invalid###"},
-                }
-            )
+            start(ws)
+            ws.send_bytes(audio)
             assert ws.receive()["code"] == 1008
-        assert factory.sessions[0].closed
+    assert factory.sessions[0].closed
+    assert not app.state.registry.sockets
 
 
 class NoReplySession(DemoSession):
@@ -173,76 +151,63 @@ class NoReplySession(DemoSession):
 
 
 def test_response_watchdog_after_successful_greeting():
-    settings = simulation_settings(first_audio_timeout_seconds=1)
     factory = SessionFactory(NoReplySession)
-    app = create_app(settings, factory)
-    with TestClient(app) as client:
+    app = create_app(simulation_settings(first_audio_timeout_seconds=1), factory)
+    with TestClient(app, base_url=LOCAL_URL) as client:
         with client.websocket_connect(
-            "/twilio/stream",
-            headers=signature(
-                settings,
-                "/twilio/stream",
-                websocket=True,
-            ),
+            "ws://localhost:8082/audio/stream", headers=LOCAL_HEADERS
         ) as ws:
-            ws.send_json(start_message(stream_ticket(settings, CALL_SID)))
-            drain_greeting(ws)
-            ws.send_json(
-                {
-                    "event": "media",
-                    "streamSid": STREAM_SID,
-                    "media": {"track": "inbound", "payload": base64.b64encode(tone(8000)).decode()},
-                }
-            )
+            start(ws)
+            ws.send_bytes(microphone_audio())
+            assert ws.receive_json()["event"] == "thinking"
             assert ws.receive()["code"] == 1011
-        assert factory.session.closed
-        assert not app.state.registry.sockets
+    assert factory.session.closed
+    assert not app.state.registry.sockets
 
 
-def test_call_limit_closes_an_active_provider():
-    # Speed up the clock-bound test; normal config enforces a 10s minimum.
-    settings = simulation_settings().model_copy(update={"max_call_seconds": 0.1})
+def test_session_limit_closes_provider():
+    settings = simulation_settings().model_copy(update={"max_session_seconds": 0.1})
     factory = DemoFactory()
     app = create_app(settings, factory)
-    with TestClient(app) as client:
+    with TestClient(app, base_url=LOCAL_URL) as client:
         with client.websocket_connect(
-            "/twilio/stream",
-            headers=signature(
-                settings,
-                "/twilio/stream",
-                websocket=True,
-            ),
+            "ws://localhost:8082/audio/stream", headers=LOCAL_HEADERS
         ) as ws:
-            ws.send_json(start_message(stream_ticket(settings, CALL_SID)))
-            drain_greeting(ws)
+            start(ws)
             assert ws.receive()["code"] == 1011
-        assert factory.sessions[0].closed
-        assert not app.state.registry.sockets
+    assert factory.sessions[0].closed
 
 
-def test_ticket_works_on_a_different_replica():
-    from xml.etree import ElementTree
+def test_stopping_during_provider_start_cancels_open():
+    class SlowFactory:
+        cancelled = False
 
-    from familyshield.simulation import ACCOUNT_SID
+        async def open(self):
+            try:
+                await asyncio.sleep(30)
+            finally:
+                self.cancelled = True
 
-    settings = simulation_settings()
-    params = {"AccountSid": ACCOUNT_SID, "CallSid": CALL_SID}
-    # HTTP instance has no state shared with the separate WS instance.
-    with TestClient(create_app(settings, DemoFactory())) as first:
-        reply = first.post(
-            "/twilio/voice", data=params, headers=signature(settings, "/twilio/voice", params)
-        )
-        ticket = (
-            ElementTree.fromstring(reply.text).find("./Connect/Stream/Parameter").attrib["value"]
-        )
-    with TestClient(create_app(settings, DemoFactory())) as second:
-        with second.websocket_connect(
-            "/twilio/stream",
-            headers=signature(
-                settings,
-                "/twilio/stream",
-                websocket=True,
-            ),
+    factory = SlowFactory()
+    app = create_app(simulation_settings(), factory)
+    with TestClient(app, base_url=LOCAL_URL) as client:
+        with client.websocket_connect(
+            "ws://localhost:8082/audio/stream", headers=LOCAL_HEADERS
         ) as ws:
-            ws.send_json(start_message(ticket))
-            drain_greeting(ws)
+            ws.send_json(start_message())
+            ws.send_json({"event": "stop"})
+            assert ws.receive()["code"] == 1000
+    assert factory.cancelled
+    assert not app.state.registry.sockets
+
+
+def test_disconnect_closes_provider():
+    factory = DemoFactory()
+    app = create_app(simulation_settings(), factory)
+    with TestClient(app, base_url=LOCAL_URL) as client:
+        with client.websocket_connect(
+            "ws://localhost:8082/audio/stream", headers=LOCAL_HEADERS
+        ) as ws:
+            start(ws)
+    assert factory.sessions[0].closed
+    assert not app.state.registry.sockets

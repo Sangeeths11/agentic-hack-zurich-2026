@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#f5f5ef" />
+    <title>Scam the Scamers · Listener</title>
+    <link rel="stylesheet" href="/assets/listener.css" />
+    <script type="module" src="/assets/listener.js"></script>
+  </head>
+  <body>
+    <header>
+      <a class="brand" href="/" aria-label="Scam the Scamers Startseite"
+        ><span class="brand-icon">◉</span> scam the scamers<span class="brand-tag"
+          >LISTENER</span
+        ></a
+      ><span class="local-badge"><i></i> Auf diesem Laptop</span>
+    </header>
+    <main>
+      <div class="intro">
+        <p class="eyebrow">EIN OFFENES OHR. EINE STIMME AN DEINER SEITE.</p>
+        <h1>Einfach da.<br />Wenn jemand spricht.</h1>
+        <p>
+          Handy auf Lautsprecher. Laptop daneben.<br />Dein Assistent hört mit
+          und spricht für dich.
+        </p>
+      </div>
+      <section class="listener-card" aria-label="Sprachassistent">
+        <div class="card-top">
+          <span
+            ><i id="status-dot"></i
+            ><span id="mode-label">BEREIT ZUM ZUHÖREN</span></span
+          ><span id="session-time">LOCAL / 01</span>
+        </div>
+        <div id="orb" class="orb" data-state="off" aria-hidden="true">
+          <div class="orbit orbit-one"></div>
+          <div class="orbit orbit-two"></div>
+          <div class="orb-core">
+            <div class="wave"><b></b><b></b><b></b><b></b><b></b></div>
+          </div>
+        </div>
+        <div class="state-copy" aria-live="polite" role="status">
+          <h2 id="status-title">
+            Einmal einschalten.<br />Dann einfach sprechen.
+          </h2>
+          <p id="status-detail">
+            Aktiviere das Mikrofon, um den Listener bereitzumachen.
+          </p>
+        </div>
+        <button id="toggle" class="primary" disabled>
+          <span id="toggle-icon" aria-hidden="true">◉</span
+          ><span id="toggle-label">Wird vorbereitet …</span>
+        </button>
+        <button id="end-session" class="text-button" hidden>
+          Gespräch beenden · weiter zuhören
+        </button>
+        <p id="error" class="error" role="alert" hidden></p>
+        <div class="meter-row">
+          <span>MIKROFON</span>
+          <div
+            class="meter"
+            role="meter"
+            aria-label="Mikrofonpegel"
+            aria-valuemin="-70"
+            aria-valuemax="0"
+            aria-valuenow="-70"
+          >
+            <div id="level"></div>
+            <i id="threshold-line"></i>
+          </div>
+          <span id="level-value">— dB</span>
+        </div>
+      </section>
+      <section class="settings" aria-label="Listener Einstellungen">
+        <div>
+          <label for="sensitivity">Wann soll der Agent starten?</label>
+          <p>Automatisch, sobald der Pegel die Schwelle kurz überschreitet.</p>
+        </div>
+        <div class="slider-wrap">
+          <input
+            id="sensitivity"
+            type="range"
+            min="-55"
+            max="-20"
+            value="-38"
+            step="1"
+            aria-describedby="sensitivity-value"
+          /><output id="sensitivity-value" for="sensitivity">−38 dB</output>
+          <div class="range-labels">
+            <span>Leise Stimmen</span><span>Laute Stimmen</span>
+          </div>
+        </div>
+      </section>
+      <div class="steps">
+        <div>
+          <span>01</span>
+          <p>
+            <strong>Handy danebenlegen</strong>Anruf selbst annehmen und
+            Lautsprecher einschalten.
+          </p>
+        </div>
+        <div>
+          <span>02</span>
+          <p>
+            <strong>Listener aktivieren</strong>Mikrofon einmal erlauben. Der
+            Kreis zeigt den Pegel.
+          </p>
+        </div>
+        <div>
+          <span>03</span>
+          <p>
+            <strong>Gespräch laufen lassen</strong>Der Agent startet bei
+            Geräuschen und antwortet hörbar.
+          </p>
+        </div>
+      </div>
+      <p class="privacy-note">
+        Im Wartezustand bleibt das Audio im Browser. Während eines Gesprächs
+        verarbeiten die KI-Anbieter die Sprache. Die App speichert keine
+        Aufnahme.
+      </p>
+    </main>
+    <footer>
+      <span>SCAM THE SCAMERS <span class="footer-dot">/</span> LOCAL LISTENER</span
+      ><span>Der Auslöser hört Geräusche · er erkennt keinen Anrufstatus.</span>
+    </footer>
+  </body>
+</html>

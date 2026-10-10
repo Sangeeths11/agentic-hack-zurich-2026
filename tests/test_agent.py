@@ -3,9 +3,9 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import gradbot
+from support import simulation_settings
 
-from familyshield.agent import GradbotFactory, GradbotSession, session_config
-from familyshield.simulation import simulation_settings
+from scam_the_scamers.agent import GradbotFactory, GradbotSession, session_config
 
 
 def test_pinned_native_sdk_accepts_german_session_configuration():

@@ -11,11 +11,8 @@ from .config import Settings
 
 @dataclass(frozen=True)
 class AgentEvent:
-    kind: Literal["audio", "interrupt", "turn_end", "activity", "transcript"]
+    kind: Literal["audio", "interrupt", "turn_end", "activity"]
     audio: bytes = b""
-    # Only populated for "transcript" (the caller's finalized speech, never
-    # the agent's own). Carried in-process for the risk rule; never logged.
-    text: str = ""
 
 
 class AgentSession(Protocol):
@@ -37,7 +34,9 @@ def session_config(settings: Settings) -> gradbot.SessionConfig:
         "pt": "Portuguese",
     }
     instructions = (
-        f"You are the AI telephone assistant for {settings.operator_name}. "
+        f"You are the AI assistant for {settings.operator_name}, running on a laptop "
+        "next to a phone on speaker. You hear the conversation through the laptop microphone "
+        "and your voice plays through the laptop speakers. "
         f"Speak {languages[settings.agent_language]}. Speak first: briefly greet the caller, "
         "explicitly introduce yourself as an AI assistant acting for the owner, "
         "and ask how you can help. Use one or two short natural sentences at a time. "
@@ -45,6 +44,7 @@ def session_config(settings: Settings) -> gradbot.SessionConfig:
         "Help with simple questions and clarify why the caller called. "
         "You have no access to the owner's calendar, messages or private information. "
         "Do not invent facts, make commitments or claim to save or deliver messages. "
+        "You cannot detect, answer, transfer or hang up a phone call. "
         "If asked, explain that this is a conversation prototype. Never claim to be the owner."
     )
     return gradbot.SessionConfig(
@@ -79,10 +79,7 @@ class GradbotSession:
             return AgentEvent("interrupt")
         if msg.msg_type == "event" and msg.event.event_type == "end_of_turn":
             return AgentEvent("turn_end")
-        if msg.msg_type == "stt_text":
-            # The caller's finalized speech, for the backend risk rule only.
-            # Still deliberately never written to logs as-is (see bridge.py).
-            return AgentEvent("transcript", text=msg.text or "")
+        # Transcript contents deliberately never enter the transport logs.
         return AgentEvent("activity")
 
     async def close(self) -> None:

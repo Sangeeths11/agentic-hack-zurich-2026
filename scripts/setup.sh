@@ -5,8 +5,6 @@ command -v uv >/dev/null || { echo 'Install uv first: https://docs.astral.sh/uv/
 uv sync --frozen --no-build-package gradbot
 if [ ! -f .env ]; then
   (umask 077; cp .env.example .env)
-  echo 'Created .env. Fill in the blank API credentials for live calls.'
+  echo 'Created .env. Fill in the blank API credentials for the voice agent.'
 fi
-uv run --no-sync familyshield simulate
-uv run --no-sync python scripts/install_tunnel.py
-echo 'Setup verified. Next: edit .env, then scripts/run_local.sh.'
+echo 'Setup complete. Next: edit .env, then scripts/run_local.sh.'
