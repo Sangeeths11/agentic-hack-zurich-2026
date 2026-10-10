@@ -197,7 +197,10 @@ def whatsapp_message(
         else f"Contact {who} NOW. Verify the caller independently."
     )
     lines.append(f"Screening alert at {datetime.now(UTC).isoformat(timespec='seconds')}.")
-    return "\n".join(lines)[:2000]
+    # CallMeBot's upstream rejected a full multiline alert with HTTP 403, while
+    # the identical text with inline separators passed its request filter.
+    # Keep every field, but send one paragraph; never retry a rejected payload.
+    return " • ".join(lines)[:2000]
 
 
 class WhatsAppAlertManager:
@@ -406,7 +409,7 @@ class WhatsAppAlertManager:
                                 (contact.relationship or "emergency contact").split()
                             )[:40]
                             name = " ".join(contact.name.split())[:50]
-                            personalized_body = f"For {name} ({relation}).\n{body}"[:2000]
+                            personalized_body = f"For {name} ({relation}). • {body}"[:2000]
                         await self._send(contact, level, personalized_body, generation)
                     if all(level <= self.attempted.get(person.phone, 0) for person in contacts):
                         break
@@ -437,6 +440,9 @@ class WhatsAppAlertManager:
             code = exc.code if isinstance(exc, ProviderError) else "transport_error"
             reason = {
                 "credentials_rejected": "Check guardian activation and the matching API key.",
+                "request_forbidden": (
+                    "CallMeBot blocked the request; HTTP 403 alone does not identify a bad key."
+                ),
                 "recipient_rejected": "Check the guardian activated CallMeBot for this number.",
                 "rate_limited": "CallMeBot reported a rate or quota limit.",
                 "message_rejected": "CallMeBot rejected the message length or size.",

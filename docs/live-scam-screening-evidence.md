@@ -1,5 +1,49 @@
 # Live scam screening: evidence and demo
 
+## Replacement guardian and HTTP 403 formatting investigation
+
+On 2026-10-10 the replacement recipient/key matched both the local server
+configuration and its active personal contact. Browser activity showed a tier-75
+request failing with HTTP 403 at 17:51:05 local time. The threshold was not the
+blocker: the independent scam flag qualified for this tier.
+
+The user approved two diagnostic sends to the replacement guardian. The short
+message returned HTTP 200; its acknowledgement body was not retained, so this
+comparison does not establish queue acceptance. The generated fictional multiline
+Red alert returned HTTP 403 with a generic Apache Forbidden response from
+`cmb-app.callmebot.com`, not an explicit invalid-key response. The diagnostic
+observer had a response-decoding error after reading the bodies; the captured HTTP
+statuses, rather than its adapter outcome labels, are the evidence for this comparison.
+
+Follow-up requests deliberately omitted the required API key and could not send
+messages. The full multiline content still returned 403, while the same content
+with spaces or bullet separators reached the missing-key response (HTTP 201).
+ASCII-only content and percent-20 space encoding did not resolve the multiline
+failure. Simple newlines and emoji controls passed, so this does not establish a
+blanket prohibition on multiline messages or identify CallMeBot's precise filter.
+
+The fix uses inline bullet separators for the alert body and personalized contact
+prefix, preserving the score, attributed summary, discrepancies, action and time.
+Generic HTTP 403 now means `request_forbidden`; only a recognized leading key error
+or HTTP 401 is categorized as a credential rejection. No retries were added.
+
+After separate approval, exactly one fictional Red test traversed the actual
+`WhatsAppAlertManager` and `CallMeBotWhatsApp` adapter. Only the test wrapper added
+an explicit fictional-data notice around the generated message. CallMeBot returned
+the documented queue acknowledgement at **2026-10-10T15:59:07+00:00**. This verifies
+the corrected format with the replacement recipient/key. The user initially reported
+no message, then confirmed **"now the message came"**. This establishes handset
+receipt of the corrected fictional alert, not a real call alert. No new live audio
+test or email was sent.
+
+Validation: **289 Python tests**, **22 JavaScript tests**, Ruff lint/format, mypy
+and both build artifacts passed. New synthetic integration coverage checks all
+three tiers through the manager and real adapter with a fake transport, preserving
+named contact details and message contents while asserting one attempt and an
+acceptance event. Generic versus explicit-key 403 responses and no-retry behavior
+are covered. The local server was restarted with profile revision 16 and its
+thresholds preserved in memory; no personal settings were written to storage.
+
 ## Investigating missing WhatsApp alerts
 
 On 2026-10-10 the user reported a high alert without a received WhatsApp message.

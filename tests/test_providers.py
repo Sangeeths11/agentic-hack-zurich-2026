@@ -538,7 +538,13 @@ async def test_callmebot_encoded_get_acceptance_and_standalone_log_privacy(caplo
     "status,body,code",
     [
         (401, "API key fake-callmebot rejected", "credentials_rejected"),
-        (403, "Not authorized", "credentials_rejected"),
+        (403, "Not authorized", "request_forbidden"),
+        (
+            403,
+            "<h1>Forbidden</h1>You don't have permission to access this resource.",
+            "request_forbidden",
+        ),
+        (403, "ERROR: APIKey fake-callmebot is invalid", "credentials_rejected"),
         (302, "", "request_failed"),
         (429, "Rate limit", "rate_limited"),
         (500, "Internal failure", "request_failed"),

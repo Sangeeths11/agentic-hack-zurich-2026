@@ -19,15 +19,18 @@ used for 50/75/90 alert tiers. The preserved local SQLite number lookup is integ
 and tested. Resend alerts are implemented and mock-tested, but credentials, verified
 sender and fallback recipient remain unconfigured; no real email has been sent.
 CallMeBot WhatsApp guardian alerts are implemented and tested with fake transport.
-One explicitly approved diagnostic message received CallMeBot's queue acknowledgement,
-and the user confirmed delayed receipt on the guardian's handset. A full live screening
-alert was separately observed to fail; its delivery is not established by that test.
+An explicitly approved short diagnostic received CallMeBot's queue acknowledgement,
+and the user confirmed delayed receipt on the original guardian's handset. A full
+multiline alert was rejected with HTTP 403. After changing to inline separators,
+an approved fictional Red alert to the replacement guardian received the queue
+acknowledgement through the real alert manager and sender, and the user confirmed
+that the corrected alert arrived on WhatsApp after a delay.
 
 Entire session capture, commit checkpoint synchronization, Graph and Brain have been
 verified. Six runner definitions are prepared, but hosted Trails/Runners remain
 unavailable following the observed API 404; no hosted evaluation is claimed. See the
 [executed evidence](docs/live-scam-screening-evidence.md). Real phone-on-speaker
-acoustic testing, calibrated fraud accuracy and guardian-message delivery remain unverified.
+acoustic testing, calibrated fraud accuracy and delivery of real call alerts remain unverified.
 
 ## Getting started
 
@@ -193,6 +196,10 @@ available. Summaries can be mistaken; they are labeled as AI summaries. Messages
 not invent voice matching, callback numbers, listen-in links or playback completion.
 The summary shares relevant conversation details with your selected contacts; the
 complete raw transcript is not included.
+Alerts use inline bullet separators because CallMeBot's upstream rejected the full
+multiline format with HTTP 403. An approved fictional Red alert in the corrected
+format received queue acceptance from the real provider. A generic 403 is reported as a blocked request,
+not as proof of an incorrect API key.
 
 An initial short debounce (3 seconds, bounded at 6 during continuous changes)
 combines nearby assessments into one alert with the highest severity and latest

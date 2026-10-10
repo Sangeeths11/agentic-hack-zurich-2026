@@ -156,7 +156,9 @@ class CallMeBotWhatsApp:
             if status_code != 200:
                 code = (
                     "credentials_rejected"
-                    if status_code in {401, 403}
+                    if status_code == 401
+                    else "request_forbidden"
+                    if status_code == 403
                     else "rate_limited"
                     if status_code == 429
                     else "request_failed"

@@ -1,12 +1,13 @@
 import asyncio
 from datetime import datetime
 
+import httpx
 import pytest
 from support import FakeWhatsApp, assessment, simulation_settings
 
 from scam_the_scamers.alerts import WhatsAppAlertManager, whatsapp_message
 from scam_the_scamers.caller import CallerLookup
-from scam_the_scamers.providers import ProviderError
+from scam_the_scamers.providers import CallMeBotWhatsApp, ProviderError
 from scam_the_scamers.risk import CRITERIA, Assessment, Scores
 
 
@@ -114,6 +115,7 @@ async def test_whatsapp_independent_flags_and_unsent_tiers_coalesce(kind):
     "failure,status",
     [
         (ProviderError("callmebot", "credentials_rejected"), "error"),
+        (ProviderError("callmebot", "request_forbidden", http_status=403), "error"),
         (ProviderError("callmebot", "request_failed", retryable=True), "error"),
         (ProviderError("callmebot", "recipient_rejected", http_status=201), "error"),
         (ProviderError("callmebot", "rate_limited", http_status=429), "error"),
@@ -153,6 +155,9 @@ async def test_whatsapp_failure_never_retries_ambiguous_send_or_announces_succes
             assert "rate or quota limit" in detail
         if isinstance(failure, ProviderError) and failure.code == "message_rejected":
             assert "message length or size" in detail
+        if isinstance(failure, ProviderError) and failure.code == "request_forbidden":
+            assert "blocked the request" in detail
+            assert "Check guardian activation" not in detail
         assert "fake-key" not in detail and settings.value("guardian_phone") not in detail
         assert manager.highest_accepted == 0
     finally:
@@ -503,3 +508,57 @@ def test_personalized_message_keeps_action_and_timestamp_with_maximum_fields():
     assert len(text) <= 1900
     assert "NOW. Verify the caller independently." in text
     assert text.endswith(".") and "Screening alert at " in text
+
+
+@pytest.mark.parametrize("level", [50, 75, 90])
+async def test_personalized_alert_reaches_provider_without_multiline_request_rejection(level):
+    settings = configured_settings()
+    result = assessment(level).model_copy(
+        update={
+            "conversation_summary": "The caller requests an urgent payment & secrecy.",
+            "profile_mismatches": ["The claimed family relationship is unverified."],
+        }
+    )
+    requests, notices = [], []
+
+    def handler(request):
+        requests.append(request)
+        message = request.url.params["text"]
+        # Reproduce the observed provider boundary using synthetic data only.
+        if "\n" in message or "\r" in message:
+            return httpx.Response(403, text="<h1>Forbidden</h1>")
+        assert request.url.params["phone"] == "12025550123"
+        assert request.url.params["apikey"] == "fake-key"
+        assert f"Score: {level}/100" in message
+        assert result.conversation_summary in message
+        assert result.profile_mismatches[0] in message
+        assert "For Emily" in message and "Screening alert at " in message
+        assert "Verify the caller independently." in message
+        assert len(message) <= 2000
+        return httpx.Response(
+            200, text="<b>Message queued.</b> You will receive it in a few seconds."
+        )
+
+    async def notify(event):
+        notices.append(event)
+
+    manager = WhatsAppAlertManager(
+        settings,
+        CallMeBotWhatsApp(settings, httpx.MockTransport(handler)),
+        "",
+        "session",
+        silent_emit,
+        preferences=personal_preferences(phones=("+12025550123",)),
+        notify=notify,
+    )
+    task = asyncio.create_task(manager.run())
+    try:
+        await manager.consider(result, CallerLookup("not_provided"))
+        await asyncio.wait_for(manager.pending.join(), 1)
+        await manager.consider(result, CallerLookup("not_provided"))
+        assert len(requests) == 1
+        assert len(notices) == 1 and notices[0]["level"] == level
+        assert notices[0]["status"] == "accepted"
+    finally:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
