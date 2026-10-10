@@ -3,11 +3,12 @@
   "checkpoint_id": "01M4K6RPXZGPTQ0VEAT1JDV33N",
   "strategy": "manual-commit",
   "branch": "feat/personalized-screening",
-  "checkpoints_count": 2,
+  "checkpoints_count": 3,
   "files_touched": [
     ".env.example",
     "AGENTS.md",
     "README.md",
+    "docs/live-scam-screening-evidence.md",
     "docs/live-scam-screening-task.md",
     "pyproject.toml",
     "src/scam_the_scamers/agent.py",
@@ -34,7 +35,8 @@
     "tests/test_personalized_session.py",
     "tests/test_profile_integration_review.py",
     "tests/test_profiles.py",
-    "tests/test_providers.py"
+    "tests/test_providers.py",
+    "tests/test_whatsapp_alerts.py"
   ],
   "sessions": [
     {
@@ -43,14 +45,21 @@
       "compact_transcript": "/0/transcript.jsonl",
       "content_hash": "/0/content_hash.txt",
       "prompt": "/0/prompt.txt"
+    },
+    {
+      "metadata": "/1/metadata.json",
+      "transcript": "/1/full.jsonl",
+      "compact_transcript": "/1/transcript.jsonl",
+      "content_hash": "/1/content_hash.txt",
+      "prompt": "/1/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 145492,
+    "input_tokens": 210014,
     "cache_creation_tokens": 0,
-    "cache_read_tokens": 7235456,
-    "output_tokens": 29021,
-    "api_call_count": 76,
+    "cache_read_tokens": 8491904,
+    "output_tokens": 35448,
+    "api_call_count": 103,
     "subagent_tokens_complete": false
   }
 }
