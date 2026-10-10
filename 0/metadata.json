@@ -1,0 +1,55 @@
+{
+  "cli_version": "0.11.4",
+  "checkpoint_id": "01M4JZW6KJJ3FD4KFGNNGWJSP0",
+  "session_id": "01a125d9-e2b1-72a0-8cc0-147fdb1e4624",
+  "strategy": "manual-commit",
+  "created_at": "2026-10-10T13:26:13.246432Z",
+  "branch": "feature/live-scam-screening",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "src/scam_the_scamers/cli.py",
+    "src/scam_the_scamers/providers.py",
+    "src/scam_the_scamers/risk.py",
+    "tests/support.py",
+    "tests/test_agent.py",
+    "tests/test_cli.py",
+    "tests/test_providers.py"
+  ],
+  "agent": "Codex",
+  "model": "gpt-6-astra",
+  "turn_id": "fb44d216673e",
+  "checkpoint_transcript_start": 533,
+  "transcript_lines_at_start": 533,
+  "compact_transcript_start": 62,
+  "token_usage": {
+    "input_tokens": 76312,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 1030144,
+    "output_tokens": 12460,
+    "api_call_count": 16
+  },
+  "session_metrics": {
+    "turn_count": 3
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-10-10T13:26:13.160847Z",
+    "agent_lines": 199,
+    "agent_removed": 32,
+    "human_added": 333,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 532,
+    "total_lines_changed": 575,
+    "agent_percentage": 40.17391304347826,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 1,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "cli_version": "0.11.4",
+  "checkpoint_id": "01M4JZW6KJJ3FD4KFGNNGWJSP0",
+  "strategy": "manual-commit",
+  "branch": "feature/live-scam-screening",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "src/scam_the_scamers/cli.py",
+    "src/scam_the_scamers/providers.py",
+    "src/scam_the_scamers/risk.py",
+    "tests/support.py",
+    "tests/test_agent.py",
+    "tests/test_cli.py",
+    "tests/test_providers.py"
+  ],
+  "sessions": [
+    {
+      "metadata": "/0/metadata.json",
+      "transcript": "/0/full.jsonl",
+      "compact_transcript": "/0/transcript.jsonl",
+      "content_hash": "/0/content_hash.txt",
+      "prompt": "/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 76312,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 1030144,
+    "output_tokens": 12460,
+    "api_call_count": 16
+  }
+}
