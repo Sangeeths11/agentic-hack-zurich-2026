@@ -15,8 +15,25 @@ The installed Graph CLI does not have the guide's `query` subcommand; the suppor
 `entire graph neighbors --symbol lookup_scam_number --direction both --depth 2`
 resolved the dataset helper, callers, normalization and tests instead.
 
-Commit/checkpoint and remote-ref verification is recorded in the follow-up evidence
-update after the implementation commit, rather than guessing a future checkpoint ID.
+Implementation commit: `9529501e5ad57e376b0ae24709aa5b7cbf55a79a`.
+`entire checkpoint list` and `entire checkpoint explain HEAD` confirmed checkpoint
+`01M4JZCBPCFGQJWJMCXPRQNFMX` linked to that commit and the same captured session.
+The commit carries the real `Entire-Checkpoint` trailer. `git ls-remote` confirmed
+both the feature branch at that commit and remote checkpoint ref
+`refs/entire/checkpoints/MX/01M4JZCBPCFGQJWJMCXPRQNFMX` at
+`bcdbaae0b4cea32eeb9ac3033a2ff404a3d8af94`.
+
+The first branch push failed with a remote pack-file error after successful Entire
+checkpoint synchronization. The remote checkpoint existed but the branch did not.
+One ordinary retry of `git push -u origin feature/live-scam-screening` succeeded;
+no force push was used.
+
+A single actual `entire trail create` attempt targeted the pushed branch with
+`setup/entire-hackathon` as base. It returned `repository not found (status 404)`.
+Trails access and GitHub App repository access are therefore not established by
+this work. No Trail or hosted Runner evaluation was created or claimed. Local
+capture, Graph, Brain and checkpoint synchronization work independently of that
+external access limitation. Runner prompt changes preserve their JSON contracts.
 
 ## Executed checks
 
