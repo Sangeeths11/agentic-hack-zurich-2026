@@ -1,0 +1,7 @@
+/Users/sangeeths/Develop/agentic-hack-zurich-2026/agentic-hack-zurich-2026-main.zip
+
+Das ist genau das ZIP-File, wo er gearbeitet hat. Packe diese Änderungen in dieses ZIP ein. Diese Änderungen waren nur Designänderungen. Ich will nur diese Designänderung bei uns drin haben, und dann lösche dieses ZIP bitte wieder aus und arbeite mit Zapp Agent und versuche, das so schnell wie möglich fertig zu bringen, ohne irgendwelche Features und Sachen zu löschen. Danke!
+
+---
+
+oke merge the branch in to the main  please and write a readme please be fast
