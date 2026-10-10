@@ -12,6 +12,7 @@
   --muted: #727a71;
   --level: 0;
   --threshold: 45.7%;
+  --risk-level: 0;
 }
 * {
   box-sizing: border-box;

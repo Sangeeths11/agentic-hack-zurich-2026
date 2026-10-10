@@ -11,8 +11,11 @@ from .config import Settings
 
 @dataclass(frozen=True)
 class AgentEvent:
-    kind: Literal["audio", "interrupt", "turn_end", "activity"]
+    kind: Literal["audio", "interrupt", "turn_end", "activity", "transcript"]
     audio: bytes = b""
+    # Only populated for "transcript" (the caller's finalized speech, never
+    # the agent's own). Carried in-process for the risk rule; never logged.
+    text: str = ""
 
 
 class AgentSession(Protocol):
@@ -79,7 +82,10 @@ class GradbotSession:
             return AgentEvent("interrupt")
         if msg.msg_type == "event" and msg.event.event_type == "end_of_turn":
             return AgentEvent("turn_end")
-        # Transcript contents deliberately never enter the transport logs.
+        if msg.msg_type == "stt_text":
+            # The caller's finalized speech, for the backend risk rule only.
+            # Still deliberately never written to logs as-is (see bridge.py).
+            return AgentEvent("transcript", text=msg.text or "")
         return AgentEvent("activity")
 
     async def close(self) -> None:

@@ -13,6 +13,9 @@ from fastapi import WebSocket, WebSocketDisconnect
 
 from .agent import AgentFactory, AgentSession
 from .config import Settings
+from .gemini_risk import extract_signals, generate_warning
+from .risk import CallRiskScore
+from .tts import render_pcm16
 
 GRADBOT_INPUT_RATE = 24_000
 GRADBOT_OUTPUT_RATE = 48_000
@@ -46,6 +49,7 @@ async def relay(ws: WebSocket, settings: Settings, factory: AgentFactory, sessio
     tasks: list[asyncio.Task] = []
     first_audio = asyncio.Event()
     incoming: asyncio.Queue[bytes] = asyncio.Queue(maxsize=128)
+    risk_score = CallRiskScore()
 
     async def receive_microphone() -> None:
         while True:
@@ -76,6 +80,7 @@ async def relay(ws: WebSocket, settings: Settings, factory: AgentFactory, sessio
     async def send_agent() -> None:
         assert session is not None
         turn_ended_at: float | None = None
+        warned_tier = "none"
         while True:
             wait_seconds = settings.provider_idle_timeout_seconds
             if turn_ended_at is not None:
@@ -95,6 +100,59 @@ async def relay(ws: WebSocket, settings: Settings, factory: AgentFactory, sessio
                 if turn_ended_at is None:
                     turn_ended_at = time.monotonic()
                 await asyncio.wait_for(ws.send_json({"event": "thinking"}), 5)
+            elif event.kind == "transcript":
+                # Backend rule, not an LLM decision — model output alone never
+                # authorises anything. The matched text itself is never sent
+                # to the browser or logged, only the resulting score/tier.
+                # Gemini (via the LLM extractor) is the primary detector; the
+                # regex detector is only a fallback if that call fails, so a
+                # missing/unreachable LLM never means no detection at all.
+                extraction = await extract_signals(settings, event.text)
+                if extraction.error:
+                    log.warning(
+                        "listener_risk_llm_fallback id=%s reason=%s", session_id, extraction.error
+                    )
+                    new_signals = risk_score.apply(event.text)
+                else:
+                    new_signals = risk_score.apply_signals(extraction.signals)
+                if new_signals:
+                    log.info(
+                        "listener_risk id=%s score=%d tier=%s new_categories=%s",
+                        session_id,
+                        risk_score.score,
+                        risk_score.tier,
+                        ",".join(s.category for s in new_signals),
+                    )
+                    await asyncio.wait_for(
+                        ws.send_json(
+                            {
+                                "event": "risk",
+                                "score": risk_score.score,
+                                "tier": risk_score.tier,
+                            }
+                        ),
+                        5,
+                    )
+                if risk_score.tier != "none" and risk_score.tier != warned_tier:
+                    warned_tier = risk_score.tier
+                    warning = await generate_warning(
+                        settings, risk_score.tier, sorted(risk_score.categories_hit)
+                    )
+                    if warning.error:
+                        log.warning(
+                            "listener_warning_failed id=%s reason=%s", session_id, warning.error
+                        )
+                        continue
+                    audio_bytes = await render_pcm16(settings, warning.text)
+                    if not audio_bytes:
+                        log.warning("listener_warning_tts_failed id=%s", session_id)
+                        continue
+                    log.info("listener_warning_spoken id=%s tier=%s", session_id, risk_score.tier)
+                    await asyncio.wait_for(ws.send_json({"event": "clear"}), 5)
+                    for offset in range(0, len(audio_bytes), 1920):
+                        await asyncio.wait_for(
+                            ws.send_bytes(audio_bytes[offset : offset + 1920]), 5
+                        )
             elif event.kind == "audio" and event.audio:
                 # 20ms PCM frames; the browser schedules them without waiting for a full reply.
                 audio = audioop.ulaw2lin(event.audio, 2)
