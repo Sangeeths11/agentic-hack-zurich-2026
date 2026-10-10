@@ -6,6 +6,21 @@ through the backend to Gradium STT. Gemini scores six warning signs; scores
 update quietly. Only eligible caution text is sent to Gradium TTS and played aloud.
 There are no greetings or open-ended agent replies.
 
+## Verified integration status
+
+Gradium streaming STT, Gemini classification and optional Gradium warning TTS were
+verified through real APIs and browser playback using synthetic speech. Gemini returns
+six criterion scores; the server deterministically calculates the overall indicator
+used for 50/75/90 alert tiers. The preserved local SQLite number lookup is integrated
+and tested. Resend alerts are implemented and mock-tested, but credentials, verified
+sender and fallback recipient remain unconfigured; no real email has been sent.
+
+Entire session capture, commit checkpoint synchronization, Graph and Brain have been
+verified. Six runner definitions are prepared, but hosted Trails/Runners remain
+unavailable following the observed API 404; no hosted evaluation is claimed. See the
+[executed evidence](docs/live-scam-screening-evidence.md). Real phone-on-speaker
+acoustic testing, calibrated fraud accuracy and email delivery remain unverified.
+
 ## Getting started
 
 Requires [uv](https://docs.astral.sh/uv/getting-started/installation/). Setup installs
