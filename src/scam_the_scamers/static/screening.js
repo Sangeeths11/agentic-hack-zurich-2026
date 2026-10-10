@@ -23,9 +23,23 @@ export function assessmentColor(event, matched = false) {
 }
 export function validGuardianAlert(event) {
   return event.status === "accepted" &&
+    [undefined, "email", "whatsapp"].includes(event.channel) &&
     [50, 75, 90].includes(event.level) &&
     event.severity === { 50: "Caution", 75: "High", 90: "Critical" }[event.level] &&
     typeof event.accepted_at === "string" && Number.isFinite(Date.parse(event.accepted_at));
+}
+export class GuardianAlerts {
+  constructor() { this.accepted = new Map(); }
+  accept(event) {
+    if (!validGuardianAlert(event)) return false;
+    const channel = event.channel ?? "email";
+    if (event.level <= (this.accepted.get(channel)?.level ?? 0)) return false;
+    this.accepted.set(channel, { ...event, channel });
+    return true;
+  }
+  latest() {
+    return [...this.accepted.values()].sort((a, b) => b.level - a.level || Date.parse(b.accepted_at) - Date.parse(a.accepted_at))[0];
+  }
 }
 export class PlaybackGuard {
   constructor() { this.until = 0; }

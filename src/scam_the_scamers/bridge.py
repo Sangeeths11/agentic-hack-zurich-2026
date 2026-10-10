@@ -12,7 +12,7 @@ from fastapi import WebSocket, WebSocketDisconnect
 
 from .agent import AgentFactory, AgentSession
 from .caller import CallerLookup, lookup_caller
-from .config import Settings
+from .config import Settings, normalize_guardian_phone
 
 INPUT_RATE = 24000
 OUTPUT_RATE = 48000
@@ -23,7 +23,7 @@ class ProtocolError(ValueError):
     pass
 
 
-async def read_start(ws: WebSocket, settings: Settings) -> CallerLookup:
+async def read_start(ws: WebSocket, settings: Settings) -> tuple[CallerLookup, str]:
     message = await asyncio.wait_for(ws.receive(), 5)
     if message["type"] == "websocket.disconnect":
         raise WebSocketDisconnect(message.get("code", 1000))
@@ -36,6 +36,15 @@ async def read_start(ws: WebSocket, settings: Settings) -> CallerLookup:
     number = start.pop("caller_number", "")
     if not isinstance(number, str) or len(number) > 64:
         raise ProtocolError("Invalid caller number")
+    guardian = start.pop("guardian_phone", settings.value("guardian_phone"))
+    try:
+        if not isinstance(guardian, str) or len(guardian) > 64:
+            raise ValueError("Invalid guardian number")
+        guardian = normalize_guardian_phone(guardian, settings.caller_default_region)
+    except ValueError:
+        # Invalid optional alert configuration never blocks microphone screening.
+        # Retain only a non-sensitive sentinel, not the malformed submitted value.
+        guardian = "invalid"
     if start != {
         "event": "start",
         "encoding": "pcm_s16le",
@@ -89,7 +98,7 @@ async def read_start(ws: WebSocket, settings: Settings) -> CallerLookup:
         ),
         5,
     )
-    return caller
+    return caller, guardian
 
 
 async def relay(
@@ -98,6 +107,7 @@ async def relay(
     factory: AgentFactory,
     session_id: str,
     caller: CallerLookup,
+    guardian_phone: str,
 ) -> None:
     started = time.monotonic()
     session: AgentSession | None = None
@@ -185,7 +195,8 @@ async def relay(
             5,
         )
         session = await asyncio.wait_for(
-            factory.open(caller, session_id), settings.session_start_timeout_seconds
+            factory.open(caller, session_id, guardian_phone=guardian_phone),
+            settings.session_start_timeout_seconds,
         )
         await asyncio.wait_for(
             ws.send_json(
@@ -195,6 +206,7 @@ async def relay(
                     "output_rate": OUTPUT_RATE,
                     "caller": caller.public(),
                     "email_status": settings.email_status(),
+                    "whatsapp_status": settings.whatsapp_status(guardian_phone),
                 }
             ),
             5,
@@ -260,9 +272,9 @@ async def handle_stream(
     code, reason = 1000, "session-ended"
     try:
         await ws.accept()
-        caller = await read_start(ws, settings)
+        caller, guardian_phone = await read_start(ws, settings)
         log.info("screening_started id=%s active=%d", session_id, len(registry.sockets))
-        await relay(ws, settings, factory, session_id, caller)
+        await relay(ws, settings, factory, session_id, caller, guardian_phone)
     except WebSocketDisconnect:
         pass
     except (ProtocolError, ValueError, KeyError, TypeError, AttributeError):

@@ -72,6 +72,8 @@ def create_app(settings: Settings | None = None, factory: AgentFactory | None = 
                 "missing": settings.missing(),
                 "warning_threshold": settings.warning_threshold,
                 "email_status": settings.email_status(),
+                "whatsapp_status": settings.whatsapp_status(),
+                "guardian_phone": settings.value("guardian_phone"),
                 "fallback_email": settings.value("fallback_email")
                 if settings.email_status() == "configured"
                 else "",

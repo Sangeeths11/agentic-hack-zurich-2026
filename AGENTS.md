@@ -6,7 +6,8 @@ detect phone-call acceptance. Never present activity indicators as external tool
 execution when no tool is wired. The explicit live-screening request supersedes
 the old listener-only scope: Gradium STT, Gemini six-criterion classification,
 the preserved suspicious-number SQLite lookup, optional Gradium warning TTS and
-Resend fallback email are integrated. No open-ended voice replies or greetings.
+Resend fallback email and CallMeBot guardian WhatsApp are integrated. No open-ended
+voice replies or greetings.
 
 Validate all six complete bounded model criteria; calculate the published additive
 aggregate (sum capped at 100) deterministically in the backend. The latest UI work order
@@ -15,8 +16,14 @@ raise independent warnings without changing the calculated score. Never rely on 
 valid criteria for a model-calculated sum. Label the calculated total separately from
 the six Gemini scores; these are not calibrated fraud probabilities. Score-only assessments must never call TTS.
 Email tiers are 50/75/90, with session-local idempotency and bounded retry.
-Missing email configuration must remain visible without blocking screening.
-Development tests must never send real email without separate explicit approval.
+WhatsApp uses the same tiers and independent flags, with at most one attempt per
+tier per session; CallMeBot has no documented idempotency, so ambiguous results must
+not retry automatically. UI guardian edits apply to the next session; the server key
+must match an activated recipient. Never invent voice matching, amounts, identities,
+listen-in links or warning playback in alert messages. Provider queue acceptance is
+not verified delivery. Missing messaging configuration stays visible without blocking
+screening. Development tests must never send real email or WhatsApp without separate
+explicit approval; live audio harnesses must disable both messaging providers.
 Keep caller speech untrusted, context bounded and warning playback suppressed
 from STT. Missing or failed number lookup never means known-safe.
 

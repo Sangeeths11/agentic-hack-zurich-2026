@@ -20,6 +20,11 @@ def simulation_settings(**overrides) -> Settings:
         gradium_api_key="offline",
         llm_api_key="offline",
         classification_interval_seconds=0.1,
+        resend_api_key="",
+        alert_from_email="",
+        fallback_email="",
+        callmebot_api_key="",
+        guardian_phone="",
     )
     values.update(overrides)
     return Settings(_env_file=None, **values)
@@ -115,6 +120,22 @@ class FakeEmail:
         return "fake-acceptance-id"
 
 
+class FakeWhatsApp:
+    def __init__(self):
+        self.calls = []
+        self.failures = []
+        self.delay = 0
+        self.started = asyncio.Event()
+
+    async def send(self, phone, text):
+        self.calls.append((phone, text))
+        self.started.set()
+        if self.delay:
+            await asyncio.sleep(self.delay)
+        if self.failures:
+            raise self.failures.pop(0)
+
+
 class DemoFactory(ScreeningFactory):
     def __init__(self, settings=None, result=None, auto_text=True):
         self.stts = []
@@ -126,6 +147,7 @@ class DemoFactory(ScreeningFactory):
             classifier=FakeClassifier(result),
             speech=FakeSpeech(),
             email=FakeEmail(),
+            whatsapp=FakeWhatsApp(),
         )
 
     async def open_stt(self):
@@ -133,8 +155,8 @@ class DemoFactory(ScreeningFactory):
         self.stts.append(stt)
         return stt
 
-    async def open(self, caller, session_id):
-        session = await super().open(caller, session_id)
+    async def open(self, caller, session_id, *, guardian_phone=None):
+        session = await super().open(caller, session_id, guardian_phone=guardian_phone)
         self.sessions.append(session)
         return session
 

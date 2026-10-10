@@ -61,7 +61,7 @@ test("PCM clipping and signed little-endian decoding", () => {
   assert.equal(decoded[1], -1);
 });
 
-const { PlaybackGuard, riskColor, validAssessment, assessmentColor, validGuardianAlert, criteria } = await import("../src/scam_the_scamers/static/screening.js");
+const { PlaybackGuard, riskColor, validAssessment, assessmentColor, validGuardianAlert, GuardianAlerts, criteria } = await import("../src/scam_the_scamers/static/screening.js");
 for (const [score, color] of [[49,"green"],[50,"amber"],[74,"amber"],[75,"red"],[89,"red"],[90,"critical"],[NaN,"unavailable"],[-1,"unavailable"]]) {
   test(`risk boundary ${score}: ${color}`, () => assert.equal(riskColor(score), color));
 }
@@ -95,4 +95,23 @@ test("guardian notification requires a timestamped provider acceptance with vali
   assert.equal(validGuardianAlert({ ...event, status: "sending" }), false);
   assert.equal(validGuardianAlert({ ...event, severity: "Critical" }), false);
   assert.equal(validGuardianAlert({ ...event, accepted_at: "bad" }), false);
+  assert.equal(validGuardianAlert({ ...event, channel: "whatsapp" }), true);
+  assert.equal(validGuardianAlert({ ...event, channel: "email" }), true);
+  assert.equal(validGuardianAlert({ ...event, channel: "sms" }), false);
+  assert.equal(validGuardianAlert({ ...event, channel: "whatsapp", status: "unknown" }), false);
+});
+test("guardian acceptance is tracked independently per channel without downgrading the banner", () => {
+  const alerts = new GuardianAlerts();
+  const event = { status: "accepted", level: 75, severity: "High", accepted_at: "2026-10-10T12:30:00Z" };
+  assert.equal(alerts.accept(event), true); // Legacy email event.
+  assert.equal(alerts.accept({ ...event, channel: "whatsapp", status: "sending" }), false);
+  assert.equal(alerts.accept({ ...event, channel: "whatsapp" }), true);
+  assert.equal(alerts.accepted.size, 2);
+  assert.equal(alerts.accept({ ...event, channel: "email" }), false);
+  assert.equal(alerts.accept({ ...event, channel: "whatsapp" }), false);
+  assert.equal(alerts.accept({ ...event, channel: "whatsapp", level: 90, severity: "Critical" }), true);
+  assert.equal(alerts.accept({ ...event, level: 50, severity: "Caution" }), false);
+  assert.equal(alerts.latest().severity, "Critical");
+  assert.equal(alerts.latest().channel, "whatsapp");
+  assert.equal(new GuardianAlerts().accepted.size, 0);
 });

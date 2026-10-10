@@ -20,14 +20,18 @@ async def check_providers(
     speech: Speech | None = None,
     stt_open: Callable[[Settings], Awaitable[STTSession]] | None = None,
 ) -> dict:
-    """Bounded synthetic probes; never record a person or send an email."""
+    """Bounded synthetic probes; never record a person or send guardian messages."""
     from .caller import CallerLookup
     from .providers import GeminiClassifier, GradiumSTT, GradiumTTS, ProviderError
 
     classifier = classifier if classifier is not None else GeminiClassifier(settings)
     speech = speech if speech is not None else GradiumTTS(settings)
     stt_open = stt_open if stt_open is not None else GradiumSTT.open
-    results: dict = {"status": "passed", "email": "not tested; doctor never sends email"}
+    results: dict = {
+        "status": "passed",
+        "email": "not tested; doctor never sends email",
+        "whatsapp": "not tested; doctor never sends WhatsApp messages",
+    }
     samples = {
         "family_only": "Hi, this is your daughter. Shall we have lunch on Sunday?",
         "scam_scenario": "Mum, it is your daughter. I have been arrested and I am terrified. "
@@ -133,6 +137,7 @@ def main() -> None:
         if args.command == "doctor":
             print("Screening configuration valid. This does not verify provider credentials.")
             print("Fallback email: " + settings.email_status() + ". No email sent.")
+            print("Guardian WhatsApp: " + settings.whatsapp_status() + ". No WhatsApp sent.")
             if args.live:
                 results = asyncio.run(check_providers(settings))
                 print(json.dumps(results, indent=2))

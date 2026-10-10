@@ -6,10 +6,11 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Protocol
 
-from .alerts import AlertManager
+from .alerts import AlertManager, WhatsAppAlertManager
 from .caller import CallerLookup
 from .config import Settings
 from .providers import (
+    CallMeBotWhatsApp,
     Classifier,
     Email,
     GeminiClassifier,
@@ -19,6 +20,7 @@ from .providers import (
     ResendEmail,
     Speech,
     STTSession,
+    WhatsApp,
 )
 from .risk import Assessment
 
@@ -38,7 +40,9 @@ class AgentSession(Protocol):
 
 
 class AgentFactory(Protocol):
-    async def open(self, caller: CallerLookup, session_id: str) -> AgentSession: ...
+    async def open(
+        self, caller: CallerLookup, session_id: str, *, guardian_phone: str | None = None
+    ) -> AgentSession: ...
 
 
 class TranscriptBuffer:
@@ -68,6 +72,8 @@ class ScreeningSession:
         email: Email,
         caller: CallerLookup,
         session_id: str,
+        whatsapp: WhatsApp,
+        guardian_phone: str | None = None,
     ):
         self.settings, self.stt, self.classifier, self.speech = settings, stt, classifier, speech
         self.caller = caller
@@ -84,6 +90,14 @@ class ScreeningSession:
         self.warning_generation = 0
         self.warning_queue: asyncio.Queue[Assessment] = asyncio.Queue(maxsize=1)
         self.alerts = AlertManager(settings, email, session_id, self.activity, notify=self.notify)
+        self.whatsapp_alerts = WhatsAppAlertManager(
+            settings,
+            whatsapp,
+            settings.value("guardian_phone") if guardian_phone is None else guardian_phone,
+            session_id,
+            self.activity,
+            notify=self.notify,
+        )
         self.closed = False
         self.tasks = [
             asyncio.create_task(self._guard(coro))
@@ -92,6 +106,7 @@ class ScreeningSession:
                 self._classify(),
                 self._warn(),
                 self.alerts.run(),
+                self.whatsapp_alerts.run(),
             )
         ]
 
@@ -126,6 +141,7 @@ class ScreeningSession:
             "stt", "streaming", "Gradium STT connected; streaming microphone audio."
         )
         await self.alerts.consider_caller(self.caller)
+        await self.whatsapp_alerts.consider_caller(self.caller)
         while True:
             event = await asyncio.wait_for(
                 self.stt.receive(), self.settings.provider_idle_timeout_seconds
@@ -197,6 +213,7 @@ class ScreeningSession:
                     "scoring", "complete", "Additive total and alert level calculated locally."
                 )
                 await self.alerts.consider(assessment, self.caller)
+                await self.whatsapp_alerts.consider(assessment, self.caller)
                 if self.warning_queue.full():
                     self.warning_queue.get_nowait()
                     self.warning_queue.task_done()
@@ -275,6 +292,7 @@ class ScreeningSession:
         if self.revision > self.last_revision:
             await self.assessed.wait()
         await self.alerts.pending.join()
+        await self.whatsapp_alerts.pending.join()
         await self.warning_queue.join()
         await self.events.put(None)
 
@@ -301,15 +319,27 @@ class ScreeningFactory:
         classifier: Classifier | None = None,
         speech: Speech | None = None,
         email: Email | None = None,
+        whatsapp: WhatsApp | None = None,
     ):
         self.settings = settings
         self.stt_open = stt_open or (lambda: GradiumSTT.open(settings))
         self.classifier = classifier or GeminiClassifier(settings)
         self.speech = speech or GradiumTTS(settings)
         self.email = email or ResendEmail(settings)
+        self.whatsapp = whatsapp or CallMeBotWhatsApp(settings)
 
-    async def open(self, caller: CallerLookup, session_id: str) -> AgentSession:
+    async def open(
+        self, caller: CallerLookup, session_id: str, *, guardian_phone: str | None = None
+    ) -> AgentSession:
         stt = await self.stt_open()
         return ScreeningSession(
-            self.settings, stt, self.classifier, self.speech, self.email, caller, session_id
+            self.settings,
+            stt,
+            self.classifier,
+            self.speech,
+            self.email,
+            caller,
+            session_id,
+            self.whatsapp,
+            guardian_phone,
         )

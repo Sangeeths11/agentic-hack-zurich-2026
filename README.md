@@ -14,6 +14,8 @@ six criterion scores; the server deterministically calculates the overall indica
 used for 50/75/90 alert tiers. The preserved local SQLite number lookup is integrated
 and tested. Resend alerts are implemented and mock-tested, but credentials, verified
 sender and fallback recipient remain unconfigured; no real email has been sent.
+CallMeBot WhatsApp guardian alerts are implemented and tested with fake transport;
+real WhatsApp acceptance and delivery have not been tested.
 
 Entire session capture, commit checkpoint synchronization, Graph and Brain have been
 verified. Six runner definitions are prepared, but hosted Trails/Runners remain
@@ -33,7 +35,8 @@ scripts/run_local.sh
 ```
 
 Open **http://localhost:8082**. Optionally enter the caller's phone number and click **Check number** for an immediate
-local lookup, check the fallback email status, then click **Enable listener**, and allow microphone access.
+local lookup, configure the guardian WhatsApp number and check the messaging status,
+then click **Enable listener**, and allow microphone access.
 Keep the tab open and computer awake. Sound above the adjustable threshold for
 180 ms starts screening; a bounded pre-roll preserves the start of speech.
 Ringing or music can trigger it. The app cannot detect call acceptance or caller ID.
@@ -41,7 +44,7 @@ Ringing or music can trigger it. The app cannot detect call acceptance or caller
 The responsive workspace offers **Split view**, **Listener** and **Tools & activity**.
 Switching views does not interrupt audio. Scores start as waiting, never invented zeroes.
 A live pipeline graph highlights actual microphone, backend, SQLite, Gradium STT,
-Gemini, local scoring, Gradium TTS, playback and Resend activity. Streaming connections
+Gemini, local scoring, Gradium TTS, playback, CallMeBot and Resend activity. Streaming connections
 and individual requests have distinct states. The most recent 60 events stay only in
 page memory. The live transcript shows the same bounded accumulated context sent to
 Gemini; it is never written to browser storage or application logs.
@@ -89,7 +92,7 @@ bypasses that threshold. **Score-only assessments never synthesize speech**: war
 text must still be one of three allowlisted caution phrases in `risk.py`. Gemini is
 instructed to supply one when it judges the conversation a scam, even at low scores.
 A number-only warning is visual and can alert a configured guardian during screening;
-checking a number before screening does not send email or synthesize speech. Each
+checking a number before screening does not send guardian messages or synthesize speech. Each
 reached spoken-warning tier is attempted at most once per session; failed/cancelled
 warnings are not repeatedly synthesized.
 **Stop warning audio** cancels playback. Echo cancellation plus bounded silence forwarding
@@ -115,6 +118,38 @@ may be stale; caller ID can be spoofed. No match is **not** proof of safety. Loo
 status is explicit Gemini context, with no automatic numerical score bonus. A matched
 number independently flags the scoring panel; clearing/changing the input invalidates
 the previous lookup. Use `+` or `00` for international numbers.
+
+## Guardian WhatsApp via CallMeBot
+
+Set `CALLMEBOT_API_KEY` privately in `.env` and optionally set `GUARDIAN_PHONE` as
+the default, then restart the server. The key stays on the server. The web UI lets
+you edit the guardian number before listening; edits apply to the next screening
+session, send nothing by themselves and are not saved in browser storage. Clearing
+the field disables WhatsApp for that session. Use an international `+` or `00`
+prefix, or a national number in `CALLER_DEFAULT_REGION` (Switzerland by default).
+
+The guardian must activate CallMeBot and the server key must match that number;
+changing the field alone cannot authorize a different recipient. Follow the
+[official CallMeBot setup](https://www.callmebot.com/blog/free-api-whatsapp-messages/).
+Configuration status does not verify the key or delivery. Missing/invalid settings
+remain visible and do not block screening or the independent fallback email.
+
+Alerts use **Amber at 50, Red at 75 and Critical at 90**. A Gemini scam judgment
+or a matched caller number independently raises tier 75, even without a qualifying
+score. Repeated scores and jitter do not resend an attempted tier; a direct jump
+to 90 sends only the highest pending alert. Each new session can alert again.
+Messages include the actual calculated score and available criterion evidence,
+or explicitly say conversation scores are not yet available. They contain no raw
+transcript, invented identity, voice-match percentage, callback number or listen-in
+link, and do not claim a warning was played when that was not established.
+
+CallMeBot has no documented idempotency key, so each tier is attempted once with a
+bounded timeout and **no automatic retry**. A timeout or ambiguous response leaves
+delivery unknown: resending could duplicate an already queued message. Only the
+documented queue acknowledgement displays **Guardian alerted at [time] — [alert
+level]**. The banner tracks WhatsApp and email separately and explains that provider
+acceptance is not confirmed delivery. The activity graph shows real request and
+failure states. Development tests and diagnostics never send real guardian messages.
 
 ## Fallback email via Resend
 
@@ -144,7 +179,7 @@ identities, so they may alert again; restarting is not a delivery recovery mecha
 
 Emails contain severity, UTC time, caller context and available criterion scores,
 without raw transcripts. A number-only alert explicitly says scores are not yet available.
-Only a successful Resend response displays **Guardian alerted at [time] — [alert level]**
+Only a successful Resend response adds email to **Guardian alerted at [time] — [alert level]**
 in the frontend. The banner also explains that this is API acceptance, not confirmed
 inbox delivery. Errors, retry attempts and missing configuration never show a success banner. “Accepted by Resend” is not verified inbox delivery. No delivery webhook
 is installed. **Development and `doctor --live` never send real email**; transport tests
@@ -159,14 +194,15 @@ preserved: `LLM_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai
 are accepted; there is no fallback to another LLM. API keys stay on the server.
 
 ```bash
-uv run scam-the-scamers doctor         # Configuration only; no network or email
+uv run scam-the-scamers doctor         # Configuration only; no network or messages
 uv run scam-the-scamers doctor --live  # Bounded synthetic Gemini/Gradium probes; API credits
 ```
 
 `doctor --live` exits 0 only when both Gemini examples, Gradium TTS and nonempty
 Gradium transcription succeed. Rejected credentials, provider/time-out/cleanup errors
 or missing transcription exit 1 with redacted diagnostics. Missing Resend settings
-are reported separately and do not fail the screening checks; email is never tested.
+and WhatsApp settings are reported separately and do not fail the screening checks;
+guardian messaging is never tested by diagnostics.
 
 Defaults: one session, five-minute cap, 20-second HTTP request timeout, 45-second STT
 heartbeat timeout, 20-second media timeout and 1.5 seconds between classification
@@ -182,8 +218,10 @@ middle context on long calls. Provider failures produce an unavailable assessmen
 new speech can trigger the next attempt. Pause/disconnect cancels in-flight work.
 
 While waiting, audio stays in the browser. During screening, Gradium processes audio,
-Google processes bounded transcript/lookup context, and configured Resend alerts process
-the risk summary and contact addresses. The app does not store or log audio/transcripts;
+Google processes bounded transcript/lookup context, and configured CallMeBot/Resend
+alerts process the risk summary and contact addresses. CallMeBot requires its key,
+recipient and encoded message in a HTTPS query; application HTTP debug logging is
+suppressed for that request. The app does not store or log audio/transcripts;
 provider retention policies are separate. Classification uses stateless chat requests,
 without provider conversation IDs. Contacts and keys are not committed. Same-origin
 WebSockets, loopback Host checks, CSP, bounded queues/messages and timeout cleanup remain.
@@ -193,7 +231,9 @@ Provider formats were verified against official documentation:
 [Gradium lifecycle](https://docs.gradium.ai/guides/websocket-lifecycle),
 [Gradium TTS](https://docs.gradium.ai/guides/text-to-speech-rest),
 [Gemini compatible structured output](https://ai.google.dev/gemini-api/docs/openai#structured-output),
-[Resend send email and idempotency](https://resend.com/docs/api-reference/emails/send-email).
+[Resend send email and idempotency](https://resend.com/docs/api-reference/emails/send-email),
+[CallMeBot WhatsApp API](https://www.callmebot.com/blog/free-api-whatsapp-messages/)
+and its linked [response example](https://documenter.getpostman.com/view/20714522/UyrEiFgK).
 The Google-compatible JSON-schema endpoint was selected to preserve the configured
 endpoint/model and verified with actual requests; no Interactions conversation is created.
 
@@ -214,7 +254,7 @@ uv build
 uv run --with playwright python tests/browser_listener.py  # Installed Chrome required
 ```
 
-Tests use fake providers, synthetic microphone audio and mock email transport, with no
+Tests use fake providers, synthetic microphone audio and mock messaging transport, with no
 API keys required. A separate opt-in check uses the existing Gradium/Gemini credentials
 and modest API credits, with generated speech as the microphone source:
 
@@ -222,9 +262,9 @@ and modest API credits, with generated speech as the microphone source:
 uv run --with playwright python tests/live_browser_listener.py --live
 ```
 
-It forcibly disables Resend, uses muted Chrome, checks valid partial assessments and
+It forcibly disables Resend and CallMeBot, uses muted Chrome, checks valid partial assessments and
 calculated totals, warning playback, microphone/provider cleanup and page errors.
-It does not activate a physical microphone, send email or establish acoustic performance.
+It does not activate a physical microphone, send guardian messages or establish acoustic performance.
 
 The offline Chrome harness checks sound activation, six live scores/colors,
 low-risk silence, warning playback/suppression/cancellation, provider cleanup, end/quiet

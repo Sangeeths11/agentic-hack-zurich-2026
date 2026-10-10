@@ -8,6 +8,32 @@ from scam_the_scamers import cli
 from scam_the_scamers.providers import ProviderError, TranscriptEvent
 
 
+async def test_live_doctor_never_sends_guardian_messages_even_when_configured(monkeypatch):
+    whatsapp_send = AsyncMock(side_effect=AssertionError("Must not contact a guardian"))
+    email_send = AsyncMock(side_effect=AssertionError("Must not contact a guardian"))
+    monkeypatch.setattr("scam_the_scamers.providers.CallMeBotWhatsApp.send", whatsapp_send)
+    monkeypatch.setattr("scam_the_scamers.providers.ResendEmail.send", email_send)
+    stt = FakeSTT(auto_text=False)
+    await stt.events.put(TranscriptEvent("text", "Synthetic diagnostic."))
+    speech = FakeSpeech()
+    speech.synthesize = AsyncMock(return_value=b"\0" * 1920)
+    result = await cli.check_providers(
+        simulation_settings(
+            callmebot_api_key="fake",
+            guardian_phone="+41791234567",
+            resend_api_key="fake",
+            alert_from_email="sender@example.com",
+            fallback_email="caregiver@example.com",
+        ),
+        classifier=FakeClassifier(),
+        speech=speech,
+        stt_open=AsyncMock(return_value=stt),
+    )
+    assert result["status"] == "passed"
+    whatsapp_send.assert_not_called()
+    email_send.assert_not_called()
+
+
 @pytest.mark.parametrize(
     "failure",
     [None, "credentials", "timeout", "tts", "stt_open", "no_transcript", "stt_stream", "cleanup"],
@@ -37,6 +63,7 @@ async def test_provider_doctor_status_and_cleanup_with_injected_providers(failur
     )
     assert result["status"] == ("failed" if failure else "passed")
     assert "never sends email" in result["email"]
+    assert "never sends WhatsApp" in result["whatsapp"]
     assert "private" not in str(result)
     if failure not in {"tts", "stt_open", "cleanup"}:
         assert stt.closed

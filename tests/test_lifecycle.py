@@ -110,7 +110,7 @@ def test_stop_during_provider_start_cancels_open():
     class SlowFactory:
         cancelled = False
 
-        async def open(self, caller, session_id):
+        async def open(self, caller, session_id, *, guardian_phone=None):
             try:
                 await asyncio.sleep(30)
             finally:
@@ -129,7 +129,7 @@ def test_stop_during_provider_start_cancels_open():
 
 def test_provider_start_failure_releases_capacity():
     class BrokenFactory:
-        async def open(self, caller, session_id):
+        async def open(self, caller, session_id, *, guardian_phone=None):
             raise RuntimeError("Synthetic failure")
 
     app = create_app(simulation_settings(), BrokenFactory())
@@ -142,7 +142,7 @@ def test_provider_start_failure_releases_capacity():
 
 def test_listed_number_is_reported_before_provider_failure():
     class BrokenFactory:
-        async def open(self, caller, session_id):
+        async def open(self, caller, session_id, *, guardian_phone=None):
             assert caller.status == "matched"
             raise RuntimeError("Synthetic failure")
 
@@ -175,7 +175,7 @@ def test_disconnect_closes_provider():
 
 def test_inbound_audio_queue_is_bounded_during_slow_start():
     class SlowFactory:
-        async def open(self, caller, session_id):
+        async def open(self, caller, session_id, *, guardian_phone=None):
             await asyncio.sleep(20)
 
     app = create_app(simulation_settings(), SlowFactory())

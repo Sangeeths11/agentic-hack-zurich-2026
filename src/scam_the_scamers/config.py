@@ -1,10 +1,40 @@
 """Validated local configuration; secrets and contacts stay out of reprs and logs."""
 
+import re
 from pathlib import Path
 from urllib.parse import urlsplit
 
 from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+def normalize_guardian_phone(value: str, region: str = "CH") -> str:
+    """Validate one contact; prefer a valid national number over bare country digits."""
+    import phonenumbers
+
+    value = value.strip()
+    if not value:
+        return ""
+    if len(value) > 64 or not re.fullmatch(r"[+0-9() .\-]+", value):
+        raise ValueError("Use a valid guardian phone number including its country code")
+    digits = re.sub(r"[() .\-]", "", value)
+    if not re.fullmatch(r"\+?[0-9]+", digits):
+        raise ValueError("Use a valid guardian phone number including its country code")
+    if digits.startswith("00"):
+        digits = "+" + digits[2:]
+    candidates = [digits]
+    # CallMeBot examples also use country digits without '+'. Try the user's
+    # national numbering plan first so a Swiss 041... number stays Swiss.
+    if not digits.startswith(("+", "0")):
+        candidates.append("+" + digits)
+    for candidate in candidates:
+        try:
+            parsed = phonenumbers.parse(candidate, region.upper())
+        except phonenumbers.NumberParseException:
+            continue
+        if not parsed.extension and phonenumbers.is_valid_number(parsed):
+            return str(phonenumbers.format_number(parsed, phonenumbers.PhoneNumberFormat.E164))
+    raise ValueError("Use a valid guardian phone number including its country code")
 
 
 class Settings(BaseSettings):
@@ -22,6 +52,8 @@ class Settings(BaseSettings):
     resend_api_key: SecretStr = SecretStr("")
     alert_from_email: SecretStr = SecretStr("")
     fallback_email: SecretStr = SecretStr("")
+    callmebot_api_key: SecretStr = SecretStr("")
+    guardian_phone: SecretStr = SecretStr("")
     scam_db_path: Path | None = None
     caller_default_region: str = "CH"
     warning_threshold: float = Field(default=50, ge=0, le=100, allow_inf_nan=False)
@@ -105,5 +137,15 @@ class Settings(BaseSettings):
             for name in names[1:]:
                 validate_email(self.value(name), check_deliverability=False)
         except EmailNotValidError:
+            return "invalid_configuration"
+        return "configured"
+
+    def whatsapp_status(self, phone: str | None = None) -> str:
+        phone = self.value("guardian_phone") if phone is None else phone
+        if not phone.strip() or not self.value("callmebot_api_key").strip():
+            return "not_configured"
+        try:
+            normalize_guardian_phone(phone, self.caller_default_region)
+        except ValueError:
             return "invalid_configuration"
         return "configured"

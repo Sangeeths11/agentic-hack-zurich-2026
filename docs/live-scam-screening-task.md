@@ -171,3 +171,30 @@ warning threshold. Create `feat/live-screening-alerts` and implement:
 
 The user explicitly requested sub-agents for this implementation. Existing runner
 schemas/output contracts remain intact; prompt context must match the new scoring rule.
+
+## Guardian WhatsApp follow-up (2026-10-10)
+
+The user requested CallMeBot guardian messages, configurable recipient in the web UI,
+and parallel sub-agents. Create `feat/whatsapp-guardian-alerts` from the previous
+feature branch. Preserve all additive scoring, independent flags, lookup and live UI
+work. Store supplied credentials only in ignored local server configuration.
+
+Use the official CallMeBot HTTPS endpoint with correctly encoded phone, text and key.
+The recipient must be activated with a matching key. Alert at 50/75/90, including
+independent Gemini/number-match flags. Messages must use available facts; the user's
+examples do not establish a voice-matching service, caller identity, monetary amount,
+callback number, warning playback completion or hosted listen-in link.
+
+Keep email independent and retain its existing retry contract. CallMeBot has no
+documented idempotency key: attempt each tier once per session, coalesce pending
+escalations, bound requests and never automatically retry an ambiguous result. Track
+queue acceptance separately from delivery and show the guardian banner only after
+provider acknowledgement. Add actual CallMeBot activity to the graph. Recipient edits
+send nothing, are transient, and are locked during listening; clearing disables the
+WhatsApp channel. Bad/missing settings must leave screening usable.
+
+Use fake transports for messaging tests and force both messaging channels off in live
+audio tests. Do not send synthetic emergency messages to a real guardian. Validate the
+full required suite, preserve runner contracts, update evidence, commit/push with a
+verified Entire checkpoint, inspect outgoing checkpoint redaction, refresh Brain raw,
+and leave the local server ready without enabling a microphone or sending a message.

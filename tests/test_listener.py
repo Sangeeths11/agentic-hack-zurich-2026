@@ -7,6 +7,8 @@ from support import (
     LOCAL_HEADERS,
     LOCAL_URL,
     DemoFactory,
+    assessment,
+    microphone_audio,
     simulation_settings,
     start_message,
 )
@@ -32,12 +34,72 @@ def test_no_keys_still_serves_ui_and_liveness_but_cannot_start_provider():
 
 
 def test_config_does_not_expose_secrets():
-    with TestClient(create_app(simulation_settings()), base_url=LOCAL_URL) as client:
+    settings = simulation_settings(
+        callmebot_api_key="fake-private-key", guardian_phone="+41791234567"
+    )
+    with TestClient(create_app(settings), base_url=LOCAL_URL) as client:
         assert client.get("/readyz").status_code == 200
         response = client.get("/api/config")
         assert response.json()["configured"]
         assert "offline" not in response.text
+        assert "fake-private-key" not in response.text
+        assert response.json()["guardian_phone"] == "+41791234567"
+        assert response.json()["whatsapp_status"] == "configured"
         assert "frame-ancestors 'none'" in client.get("/").headers["content-security-policy"]
+
+
+@pytest.mark.parametrize(
+    ("override", "status", "recipient", "region"),
+    [
+        ({}, "configured", "+41791234567", "CH"),
+        ({"guardian_phone": "41 78 123 45 67"}, "configured", "+41781234567", "CH"),
+        ({"guardian_phone": ""}, "not_configured", None, "CH"),
+        ({"guardian_phone": "not a number"}, "invalid_configuration", None, "CH"),
+        ({"guardian_phone": None}, "invalid_configuration", None, "CH"),
+        ({"guardian_phone": 41791234567}, "invalid_configuration", None, "CH"),
+        ({"guardian_phone": "1" * 65}, "invalid_configuration", None, "CH"),
+        ({"guardian_phone": "2025550123"}, "configured", "+12025550123", "US"),
+    ],
+)
+def test_guardian_phone_session_config_is_validated_without_blocking_screening(
+    override, status, recipient, region, caplog
+):
+    settings = simulation_settings(
+        callmebot_api_key="fake-private-key",
+        guardian_phone="+41791234567",
+        caller_default_region=region,
+    )
+    factory = DemoFactory(settings, assessment(75))
+    with TestClient(create_app(settings, factory), base_url=LOCAL_URL) as client:
+        with client.websocket_connect(
+            "ws://localhost:8082/audio/stream", headers=LOCAL_HEADERS
+        ) as ws:
+            ws.send_json({**start_message(), **override})
+            while (event := ws.receive_json())["event"] != "ready":
+                pass
+            assert event["whatsapp_status"] == status
+            ws.send_bytes(microphone_audio())
+            ws.send_json({"event": "finish"})
+            emitted = []
+            while "code" not in (message := ws.receive()):
+                if "text" in message:
+                    emitted.append(json.loads(message["text"]))
+            assert message["code"] == 1000
+    assert any(event["event"] == "assessment" for event in emitted)
+    notices = [event for event in emitted if event["event"] == "guardian_alert"]
+    if recipient:
+        assert [phone for phone, _ in factory.whatsapp.calls] == [recipient]
+        assert len(notices) == 1 and notices[0]["channel"] == "whatsapp"
+        assert notices[0]["level"] == 75
+    else:
+        assert not factory.whatsapp.calls and not notices
+        assert any(
+            event.get("tool") == "callmebot" and event.get("status") == status for event in emitted
+        )
+    assert "fake-private-key" not in caplog.text
+    assert "+41791234567" not in caplog.text
+    assert "+41781234567" not in caplog.text
+    assert all("4179" not in transcript for transcript, _ in factory.classifier.calls)
 
 
 @pytest.mark.parametrize(

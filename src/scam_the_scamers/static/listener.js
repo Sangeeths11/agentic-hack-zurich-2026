@@ -1,11 +1,12 @@
 import { LevelTrigger, decodePcm } from "./audio.js";
 import { addActivity, showActivityPhase, showTool, resetTools } from "./activity.js";
 
-import { criteria, riskColor, validAssessment, assessmentColor, validGuardianAlert, PlaybackGuard } from "./screening.js";
+import { criteria, riskColor, validAssessment, assessmentColor, GuardianAlerts, PlaybackGuard } from "./screening.js";
 
 const guard = new PlaybackGuard();
 let revision = 0, finishing = false, warningPlaybackAllowed = false;
-let latestAssessment = null, callerMatched = false, transcriptRevision = 0, guardianLevel = 0;
+let latestAssessment = null, callerMatched = false, transcriptRevision = 0;
+let guardianAlerts = new GuardianAlerts(), whatsappStatus = "not_configured", defaultGuardianPhone = "";
 let lookupRequest = null, lookupSequence = 0;
 const TRANSCRIPT_LIMIT = 24000;
 const $ = (id) => document.getElementById(id);
@@ -156,6 +157,7 @@ async function stop() {
   document.documentElement.style.setProperty("--level", 0);
   $("level-value").textContent = "— dB";
   $("caller-number").disabled = false;
+  $("guardian-phone").disabled = false;
   $("check-number").disabled = false;
   $("toggle-label").textContent = "Enable listener";
   $("toggle").disabled = !configured;
@@ -221,7 +223,7 @@ function startSession() {
   latestAssessment = null;
   resetTranscript();
   resetTools();
-  guardianLevel = 0;
+  guardianAlerts = new GuardianAlerts();
   $("guardian-banner").hidden = true;
   resetScores("Waiting for speech and a valid assessment.");
   $("warning-text").hidden = true;
@@ -251,6 +253,7 @@ function startSession() {
           sample_rate: 24000,
           channels: 1,
           caller_number: $("caller-number").value,
+          guardian_phone: $("guardian-phone").value,
         }),
       );
   };
@@ -275,6 +278,10 @@ function startSession() {
       clearTimeout(startupTimer);
       showCaller(event.caller);
       $("tool-resend").textContent = event.email_status.replaceAll("_", " ");
+      if (typeof event.whatsapp_status === "string") {
+        if (!$("tool-callmebot").dataset.status) $("tool-callmebot").textContent = event.whatsapp_status.replaceAll("_", " ");
+        showWhatsAppConfig(event.whatsapp_status, true);
+      }
       setPhase("listening");
       pump();
     } else if (event.event === "assessment") {
@@ -380,6 +387,7 @@ function onFrame({ pcm, rms }) {
 async function start() {
   if (!configured || enabled || preparing || stopping) return;
   preparing = true;
+  $("guardian-phone").disabled = true;
   if (lookupRequest) {
     lookupRequest.abort();
     lookupRequest = null;
@@ -488,10 +496,16 @@ try {
   configured = config.configured;
   maxSessionSeconds = config.max_session_seconds;
   $("caller-help").textContent = `Enter an international number (+country code), or a local number in ${config.caller_default_region}. Caller ID is not detected.`;
+  $("guardian-help").textContent = `Use an international number (+ or 00), or a local number in ${config.caller_default_region}. The guardian must activate CallMeBot for this number; its matching API key stays on the server. Edits apply when screening next starts. Clear the number to disable WhatsApp. Editing sends no message.`;
   $("fallback-status").textContent = config.email_status === "configured"
     ? `Fallback: ${config.fallback_email}. Automatic alerts at levels 50, 75 and 90; accepted alerts appear in a banner. Inbox delivery is unverified.`
     : `Fallback email: ${config.email_status.replaceAll("_", " ")}. Screening works without email alerts.`;
   $("tool-resend").textContent = config.email_status.replaceAll("_", " ");
+  whatsappStatus = config.whatsapp_status ?? "not_configured";
+  defaultGuardianPhone = typeof config.guardian_phone === "string" ? config.guardian_phone : "";
+  $("guardian-phone").value = defaultGuardianPhone;
+  $("tool-callmebot").textContent = whatsappStatus.replaceAll("_", " ");
+  showWhatsAppConfig(whatsappStatus);
   $("toggle").disabled = !configured;
   $("toggle-label").textContent = "Enable listener";
   if (!configured) {
@@ -601,13 +615,37 @@ function showTranscript(event) {
 }
 
 function showGuardianAlert(event) {
-  if (!validGuardianAlert(event) || event.level <= guardianLevel) return;
-  guardianLevel = event.level;
-  const time = new Intl.DateTimeFormat("en", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }).format(new Date(event.accepted_at));
-  $("guardian-message").textContent = `Guardian alerted at ${time} — ${event.severity}`;
-  $("guardian-banner").dataset.level = String(event.level);
+  if (!guardianAlerts.accept(event)) return;
+  const latest = guardianAlerts.latest();
+  const time = new Intl.DateTimeFormat("en", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }).format(new Date(latest.accepted_at));
+  $("guardian-message").textContent = `Guardian alerted at ${time} — ${latest.severity}`;
+  const channels = [...guardianAlerts.accepted.values()].map((accepted) => `${accepted.channel === "whatsapp" ? "WhatsApp (CallMeBot)" : "Email (Resend)"}: ${accepted.severity}`);
+  $("guardian-note").textContent = `Accepted by provider · ${channels.join(" · ")}. Delivery is unverified.`;
+  $("guardian-banner").dataset.level = String(latest.level);
   $("guardian-banner").hidden = false;
 }
+
+function showWhatsAppConfig(status, session = false) {
+  const phone = $("guardian-phone").value.trim();
+  const compact = phone.replace(/[ ().-]/g, "");
+  const validFormat = !phone || /^[+0-9() .-]+$/.test(phone) && /^\+?\d+$/.test(compact);
+  const changed = phone !== defaultGuardianPhone;
+  $("guardian-phone").setAttribute("aria-invalid", String(!validFormat));
+  let message;
+  if (!phone) message = "WhatsApp disabled: no guardian number. Screening continues.";
+  else if (!validFormat) message = "Invalid phone format. Use a phone number, for example +41 79 123 45 67. The server validates the number when screening starts.";
+  else if (!session && changed) message = "Guardian number set for the next screening session. The server will validate this number and its configuration when screening starts.";
+  else if (status === "configured") message = "WhatsApp configured. Automatic alerts at levels 50, 75 and 90, or an independent scam flag.";
+  else if (status === "invalid_configuration") message = "WhatsApp configuration is invalid. Check the guardian number and server settings. Screening continues.";
+  else message = "WhatsApp not configured. Add the matching CallMeBot API key on the server. Screening continues without WhatsApp.";
+  if (!session && phone && (changed || !validFormat)) {
+    message += ` Server WhatsApp configuration: ${status.replaceAll("_", " ")}.`;
+    if (status === "not_configured") message += " Check that a matching CallMeBot API key is set on the server.";
+  }
+  $("whatsapp-status").textContent = message;
+  $("whatsapp-status").dataset.status = !validFormat ? "invalid_configuration" : status;
+}
+$("guardian-phone").addEventListener("input", () => showWhatsAppConfig(whatsappStatus));
 
 $("caller-number").addEventListener("input", () => {
   lookupSequence++;

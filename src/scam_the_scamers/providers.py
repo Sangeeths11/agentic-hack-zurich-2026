@@ -4,6 +4,9 @@ import asyncio
 import audioop
 import base64
 import json
+import logging
+import re
+from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import Any, Protocol
 
@@ -11,7 +14,7 @@ import httpx
 from websockets.asyncio.client import ClientConnection, connect
 
 from .caller import CallerLookup
-from .config import Settings
+from .config import Settings, normalize_guardian_phone
 from .risk import SYSTEM_PROMPT, Assessment
 
 
@@ -44,6 +47,92 @@ class Speech(Protocol):
 
 class Email(Protocol):
     async def send(self, body: dict, key: str) -> str: ...
+
+
+class WhatsApp(Protocol):
+    async def send(self, phone: str, text: str) -> None: ...
+
+
+_private_http: ContextVar[bool] = ContextVar("private_callmebot_request", default=False)
+
+
+class _PrivateHTTPFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        return not _private_http.get()
+
+
+_private_http_filter = _PrivateHTTPFilter()
+
+
+def _protect_callmebot_logs() -> None:
+    # HTTPX INFO logs print full URLs and HTTPCore DEBUG logs may print paths.
+    # Install on the actual loggers (parent filters do not cover child records)
+    # after client construction loads HTTPCore. ContextVar isolates concurrent
+    # non-CallMeBot requests and works even without create_app()/CLI logging setup.
+    names = list(logging.Logger.manager.loggerDict)
+    for name in {"httpx", "httpcore", *names}:
+        if name in {"httpx", "httpcore"} or name.startswith(("httpx.", "httpcore.")):
+            logging.getLogger(name).addFilter(_private_http_filter)
+
+
+class CallMeBotWhatsApp:
+    def __init__(self, settings: Settings, transport: httpx.AsyncBaseTransport | None = None):
+        self.settings, self.transport = settings, transport
+
+    async def send(self, phone: str, text: str) -> None:
+        s = self.settings
+        status = s.whatsapp_status(phone)
+        if status != "configured":
+            raise ProviderError("callmebot", status)
+        if not text.strip() or len(text) > 2000:
+            raise ProviderError("callmebot", "invalid_message")
+        params = {
+            "phone": normalize_guardian_phone(phone, s.caller_default_region).lstrip("+"),
+            "text": text,
+            "apikey": s.value("callmebot_api_key"),
+        }
+        token = _private_http.set(True)
+        try:
+            async with asyncio.timeout(s.request_timeout_seconds):
+                async with httpx.AsyncClient(
+                    timeout=s.request_timeout_seconds,
+                    transport=self.transport,
+                    follow_redirects=False,
+                    trust_env=False,
+                ) as client:
+                    _protect_callmebot_logs()
+                    async with client.stream(
+                        "GET", "https://api.callmebot.com/whatsapp.php", params=params
+                    ) as response:
+                        if response.status_code != 200:
+                            code = (
+                                "credentials_rejected"
+                                if response.status_code in {401, 403}
+                                else "request_failed"
+                            )
+                            raise ProviderError("callmebot", code)
+                        data = bytearray()
+                        async for chunk in response.aiter_bytes():
+                            if len(data) + len(chunk) > 8192:
+                                raise ProviderError("callmebot", "response_too_large")
+                            data.extend(chunk)
+            # The official linked Postman example returns HTML, including echoed
+            # recipient/text. Only the terminal acknowledgement proves acceptance.
+            # Never log the body; status 200 also occurs for provider rejections.
+            raw = data.decode("utf-8", errors="replace")
+            accepted = re.search(
+                r"<b>\s*Message queued\.\s*</b>\s*You will receive it in a few seconds\."
+                r"\s*(?:</(?:body|html)>\s*)*$",
+                raw,
+            )
+            if not accepted:
+                raise ProviderError("callmebot", "acceptance_unconfirmed")
+        except (httpx.HTTPError, TimeoutError):
+            # A failed response may follow a successful send. CallMeBot has no
+            # documented idempotency key, so ambiguous attempts are not retried.
+            raise ProviderError("callmebot", "transport_error") from None
+        finally:
+            _private_http.reset(token)
 
 
 async def post_bounded(

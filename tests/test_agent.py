@@ -304,3 +304,88 @@ async def test_tts_failure_leaves_scores_available_and_cancel_discards_pending_s
         assert not any(getattr(e, "audio", None) for e in events)
     finally:
         await session.close()
+
+
+async def test_whatsapp_and_email_alerts_complete_independently_without_tts_or_recipient_context():
+    settings = simulation_settings(
+        callmebot_api_key="fake",
+        guardian_phone="+41791234567",
+        resend_api_key="fake",
+        alert_from_email="sender@example.com",
+        fallback_email="caregiver@example.com",
+    )
+    factory = DemoFactory(settings, assessment(75))
+    factory.whatsapp.delay = 0.05
+    session = await factory.open(CallerLookup("not_provided"), "both-channels")
+    try:
+        await session.send_audio(microphone_audio())
+        await asyncio.wait_for(session.finish(), 2)
+        notices = []
+        while (event := await session.receive()) is not None:
+            if event.payload.get("event") == "guardian_alert":
+                notices.append(event.payload)
+        assert len(factory.email.calls) == len(factory.whatsapp.calls) == 1
+        assert {event["channel"] for event in notices} == {"email", "whatsapp"}
+        assert session.whatsapp_alerts.highest_accepted == 75
+        assert factory.whatsapp.calls[0][0] == "+41791234567"
+        assert not factory.speech.calls
+        assert "+41791234567" not in str(factory.classifier.calls)
+    finally:
+        await session.close()
+
+
+async def test_whatsapp_failure_keeps_screening_email_and_final_results_available():
+    settings = simulation_settings(
+        callmebot_api_key="fake",
+        guardian_phone="+41791234567",
+        resend_api_key="fake",
+        alert_from_email="sender@example.com",
+        fallback_email="caregiver@example.com",
+    )
+    factory = DemoFactory(settings, assessment(90))
+    factory.whatsapp.failures = [ProviderError("callmebot", "credentials_rejected")]
+    session = await factory.open(CallerLookup("not_provided"), "failure")
+    try:
+        await session.send_audio(microphone_audio())
+        await asyncio.wait_for(session.finish(), 2)
+        emitted = []
+        while (event := await session.receive()) is not None:
+            emitted.append(event.payload)
+        assert any(event.get("event") == "assessment" for event in emitted)
+        notices = [event for event in emitted if event.get("event") == "guardian_alert"]
+        assert len(notices) == 1 and notices[0]["channel"] == "email"
+        assert session.whatsapp_alerts.highest_accepted == 0
+        assert len(factory.whatsapp.calls) == 1
+    finally:
+        await session.close()
+
+
+async def test_whatsapp_recipient_snapshot_and_session_isolation():
+    settings = simulation_settings(callmebot_api_key="fake", guardian_phone="+41791234567")
+    factory = DemoFactory(settings, assessment(50))
+    first = await factory.open(CallerLookup("not_provided"), "first", guardian_phone="+41781234567")
+    second = await factory.open(CallerLookup("not_provided"), "second", guardian_phone="")
+    try:
+        await first.send_audio(microphone_audio())
+        await second.send_audio(microphone_audio())
+        await asyncio.wait_for(asyncio.gather(first.finish(), second.finish()), 2)
+        assert [phone for phone, _ in factory.whatsapp.calls] == ["+41781234567"]
+        assert first.whatsapp_alerts.highest_accepted == 50
+        assert second.whatsapp_alerts.highest_accepted == 0
+        assert settings.value("guardian_phone") == "+41791234567"
+    finally:
+        await first.close()
+        await second.close()
+
+
+async def test_pause_cancels_pending_whatsapp_and_closes_microphone_provider():
+    settings = simulation_settings(callmebot_api_key="fake", guardian_phone="+41791234567")
+    factory = DemoFactory(settings, assessment(90))
+    factory.whatsapp.delay = 30
+    session = await factory.open(CallerLookup("not_provided"), "cancel-alert")
+    await session.send_audio(microphone_audio())
+    await next_event(session, "assessment")
+    await asyncio.wait_for(factory.whatsapp.started.wait(), 1)
+    await asyncio.wait_for(session.close(), 0.5)
+    assert factory.stts[0].closed and all(task.done() for task in session.tasks)
+    assert session.whatsapp_alerts.highest_accepted == 0

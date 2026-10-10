@@ -1,4 +1,4 @@
-"""Opt-in live provider/browser check; uses API credits, never real mic input or email.
+"""Opt-in live provider/browser check; uses API credits, never real mic or guardian messages.
 
 Run: uv run --with playwright python tests/live_browser_listener.py --live
 Adapted from the parent's independent review harness. Chrome output is muted;
@@ -28,6 +28,8 @@ async def main():
             "resend_api_key": SecretStr(""),
             "fallback_email": SecretStr(""),
             "alert_from_email": SecretStr(""),
+            "callmebot_api_key": SecretStr(""),
+            "guardian_phone": SecretStr(""),
             "max_session_seconds": 90,
         }
     )
@@ -152,6 +154,7 @@ async def main():
                 ).is_visible()
                 assert await page.locator("#warning-text").is_visible()
                 assert "not configured" in await page.locator("#tool-resend").inner_text()
+                assert "not configured" in await page.locator("#tool-callmebot").inner_text()
                 await asyncio.to_thread(Path("artifacts").mkdir, exist_ok=True)
                 await page.screenshot(path="artifacts/listener-live-provider.png", full_page=True)
                 await page.get_by_role("button", name="Pause listener").click()
@@ -177,6 +180,7 @@ async def main():
                             "criteria": criteria,
                             "warning_playback": "started in muted browser",
                             "email": "disabled; none sent",
+                            "whatsapp": "disabled; none sent",
                             "pause_cleanup": "passed",
                             "page_errors": errors,
                             "valid_assessments": len(assessments),
@@ -199,5 +203,5 @@ if __name__ == "__main__":
         "--live", action="store_true", help="Authorize bounded Gradium/Gemini API usage"
     )
     if not parser.parse_args().live:
-        parser.error("--live is required; this check uses real provider credits (never email)")
+        parser.error("--live is required; uses real provider credits (never guardian messages)")
     asyncio.run(main())

@@ -57,7 +57,7 @@
       </div>
       <aside id="guardian-banner" class="guardian-banner" role="status" hidden>
         <strong id="guardian-message"></strong>
-        <p>Accepted by the email provider. Inbox delivery is unverified.</p>
+        <p id="guardian-note">Accepted by the provider. Delivery is unverified.</p>
       </aside>
       <div id="workspace" class="workspace" data-view="split">
         <div id="listener-panel" aria-label="Listener workspace">
@@ -90,8 +90,14 @@
                 placeholder="+41 79 123 45 67" aria-describedby="caller-help" /><button id="check-number" type="button">Check number</button></div>
               <p id="caller-help">Enter an international number, or a Swiss local number. The microphone cannot detect caller ID.</p>
               <p id="caller-check-status" class="caller-check-status" role="status" hidden></p>
+              <div class="guardian-settings">
+                <label for="guardian-phone">Guardian WhatsApp number <span>(optional)</span></label>
+                <input id="guardian-phone" type="tel" maxlength="64" autocomplete="off" placeholder="+41 79 123 45 67" aria-describedby="guardian-help whatsapp-status" />
+                <p id="guardian-help">Use an international number (+ or 00), or a Swiss local number. The guardian must activate CallMeBot for this number; its matching API key stays on the server. Edits apply when screening next starts. Clear the number to disable WhatsApp. Editing sends no message.</p>
+                <p id="whatsapp-status" role="status">Checking WhatsApp configuration…</p>
+              </div>
               <p id="fallback-status" role="status">Checking fallback email configuration…</p>
-              <p class="provider-note">During screening, Gradium transcribes audio and Gemini assesses the text. Configured fallback alerts send a risk summary via Resend.</p>
+              <p class="provider-note">During screening, Gradium transcribes audio and Gemini assesses the text. Configured guardian alerts send a risk summary via CallMeBot (WhatsApp) and Resend (email).</p>
             </div>
             <button id="toggle" class="primary" disabled>
               <span id="toggle-icon" aria-hidden="true">◉</span
@@ -171,7 +177,7 @@
               <div class="section-heading"><h3 id="graph-title">Screening flow</h3><span class="graph-legend"><i></i> Active now</span></div>
               <p class="graph-description">Audio → transcript → assessment → response. Highlights follow actual activity.</p>
               <div class="flow-graph" aria-label="Live tool graph">
-                <svg class="flow-lines" viewBox="0 0 600 360" preserveAspectRatio="none" aria-hidden="true">
+                <svg class="flow-lines" viewBox="0 0 600 488" preserveAspectRatio="none" aria-hidden="true">
                   <defs><marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" /></marker></defs>
                   <path d="M 178 52 H 218" data-to="backend" />
                   <path d="M 378 52 H 418" data-to="lookup" />
@@ -179,7 +185,8 @@
                   <path d="M 178 180 H 218" data-to="gemini" />
                   <path d="M 378 180 H 418" data-to="scoring" />
                   <path d="M 500 224 V 246 H 100 V 264" data-to="tts" />
-                  <path d="M 500 224 V 264" data-to="resend" />
+                  <path d="M 500 224 V 264" data-to="callmebot" />
+                  <path d="M 578 180 H 592 V 436 H 578" data-to="resend" />
                   <path d="M 178 308 H 218" data-to="speaker" />
                 </svg>
                 <div id="microphone-stage" class="flow-node" data-active="false"><span class="node-kind">BROWSER</span><h3>Microphone</h3><p id="microphone-status">Off</p></div>
@@ -190,6 +197,8 @@
                 <div id="node-scoring" class="flow-node" data-active="false"><span class="node-kind">LOCAL SERVER</span><h3>Add scores</h3><p id="tool-scoring">Waiting for assessment</p></div>
                 <div id="node-tts" class="flow-node" data-active="false"><span class="node-kind">GRADIUM API</span><h3>Warning voice</h3><p id="tool-tts">No warning requested</p></div>
                 <div id="speaker-stage" class="flow-node" data-active="false"><span class="node-kind">BROWSER</span><h3>Speaker</h3><p id="speaker-status">Quiet</p></div>
+                <div id="node-callmebot" class="flow-node" data-active="false"><span class="node-kind">CALLMEBOT API</span><h3>Guardian WhatsApp</h3><p id="tool-callmebot">Checking configuration</p></div>
+                <p class="guardian-flow-note">Guardian alerts follow the call's alert level. A highlighted provider is sending; acceptance does not confirm delivery.</p>
                 <div id="node-resend" class="flow-node" data-active="false"><span class="node-kind">RESEND API</span><h3>Guardian email</h3><p id="tool-resend">Checking configuration</p></div>
               </div>
               <p id="caller-result" class="rubric-note">No number checked. A missing match never proves safety.</p>

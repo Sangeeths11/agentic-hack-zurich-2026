@@ -1,6 +1,8 @@
 import asyncio
 import base64
 import json
+import logging
+import traceback
 from unittest.mock import AsyncMock
 
 import httpx
@@ -9,8 +11,9 @@ from pydantic import ValidationError
 from support import assessment, microphone_audio, simulation_settings
 
 from scam_the_scamers.caller import CallerLookup
-from scam_the_scamers.config import Settings
+from scam_the_scamers.config import Settings, normalize_guardian_phone
 from scam_the_scamers.providers import (
+    CallMeBotWhatsApp,
     GeminiClassifier,
     GradiumSTT,
     GradiumTTS,
@@ -304,6 +307,161 @@ async def test_resend_mock_transport_contract_and_no_send_when_unconfigured():
     with pytest.raises(ProviderError):
         await ResendEmail(simulation_settings(), transport).send(body, "never")
     assert len(seen) == 1
+
+
+def whatsapp_settings():
+    return simulation_settings(callmebot_api_key="fake-callmebot", guardian_phone="+41791234567")
+
+
+@pytest.mark.parametrize(
+    "value,expected",
+    [
+        ("", ""),
+        ("   ", ""),
+        ("+41 79 123 45 67", "+41791234567"),
+        ("0041 79 123 45 67", "+41791234567"),
+        ("079 123 45 67", "+41791234567"),
+        ("41791234567", "+41791234567"),
+        ("041 234 56 78", "+41412345678"),
+        ("412345678", "+41412345678"),
+        ("+1 (202) 555-0123", "+12025550123"),
+    ],
+)
+def test_guardian_phone_normalization(value, expected):
+    assert normalize_guardian_phone(value) == expected
+
+
+@pytest.mark.parametrize(
+    "value", ["123", "abc", "++41791234567", "+41+791234567", "+41791234567 ext123", "1" * 65]
+)
+def test_guardian_phone_rejects_invalid_without_echoing_contact(value):
+    with pytest.raises(ValueError) as error:
+        normalize_guardian_phone(value)
+    assert value not in str(error.value)
+
+
+def test_whatsapp_configuration_does_not_block_screening_or_expose_secrets():
+    settings = whatsapp_settings()
+    assert settings.whatsapp_status() == "configured"
+    assert settings.whatsapp_status("") == "not_configured"
+    assert settings.whatsapp_status("invalid") == "invalid_configuration"
+    assert simulation_settings(guardian_phone="+41791234567").whatsapp_status() == "not_configured"
+    assert simulation_settings(callmebot_api_key="fake").whatsapp_status() == "not_configured"
+    assert not simulation_settings(guardian_phone="bad").missing()
+    assert "fake-callmebot" not in repr(settings)
+    assert "+41791234567" not in repr(settings)
+
+
+async def test_callmebot_encoded_get_acceptance_and_standalone_log_privacy(caplog):
+    seen = []
+    message = "⚠️ Scam alert\nScore: 52/100\nMoney & urgency + secrecy?"
+    httpcore_logger = logging.getLogger("httpcore.http11")
+
+    def handler(request):
+        seen.append(request)
+        assert request.method == "GET"
+        assert request.url.scheme == "https"
+        assert request.url.host == "api.callmebot.com"
+        assert request.url.path == "/whatsapp.php"
+        assert dict(request.url.params) == {
+            "phone": "41791234567",
+            "text": message,
+            "apikey": "fake-callmebot",
+        }
+        assert b"%0A" in request.url.query and b"%26" in request.url.query
+        httpcore_logger.debug("Sending private URL %s", request.url)
+        logging.getLogger("httpx").warning("Private URL %s", request.url)
+        return httpx.Response(
+            200,
+            text="<p>Message to: +41791234567<p>Text to send: "
+            + message
+            + "<p><b>Message queued.</b> You will receive it in a few seconds.",
+        )
+
+    with (
+        caplog.at_level(logging.DEBUG, logger="httpx"),
+        caplog.at_level(logging.DEBUG, logger="httpcore.http11"),
+    ):
+        await CallMeBotWhatsApp(whatsapp_settings(), httpx.MockTransport(handler)).send(
+            "079 123 45 67", message
+        )
+        logging.getLogger("httpx").info("Subsequent nonprivate request logging works")
+    assert len(seen) == 1
+    assert "Subsequent nonprivate request logging works" in caplog.text
+    for private in ("fake-callmebot", "41791234567", "Money", "%E2", "apikey="):
+        assert private not in caplog.text
+
+
+@pytest.mark.parametrize(
+    "status,body,code",
+    [
+        (401, "API key fake-callmebot rejected", "credentials_rejected"),
+        (403, "Not authorized", "credentials_rejected"),
+        (302, "", "request_failed"),
+        (429, "Rate limit", "request_failed"),
+        (500, "Internal failure", "request_failed"),
+        (200, "<b>ERROR: API key invalid</b>", "acceptance_unconfirmed"),
+        (200, "", "acceptance_unconfirmed"),
+        (200, "Message sent", "acceptance_unconfirmed"),
+        (200, "<b>Message queued.</b> ERROR", "acceptance_unconfirmed"),
+        (
+            200,
+            "Text to send: Message queued. You will receive it in a few seconds.",
+            "acceptance_unconfirmed",
+        ),
+        (200, "x" * 8193, "response_too_large"),
+    ],
+)
+async def test_callmebot_rejections_are_safe_bounded_and_never_retried(status, body, code):
+    seen = []
+
+    def handler(request):
+        seen.append(request)
+        return httpx.Response(status, text=body, headers={"location": "https://example.org"})
+
+    with pytest.raises(ProviderError) as error:
+        await CallMeBotWhatsApp(whatsapp_settings(), httpx.MockTransport(handler)).send(
+            "+41791234567", "Synthetic summary"
+        )
+    assert error.value.provider == "callmebot"
+    assert error.value.code == code
+    assert not error.value.retryable
+    assert "fake-callmebot" not in str(error.value)
+    assert len(seen) == 1
+
+
+async def test_callmebot_unconfigured_invalid_contact_or_message_never_sends():
+    transport = httpx.MockTransport(lambda request: pytest.fail("Unexpected outbound request"))
+    for settings, phone, message in [
+        (simulation_settings(), "+41791234567", "Synthetic alert"),
+        (whatsapp_settings(), "", "Synthetic alert"),
+        (whatsapp_settings(), "invalid", "Synthetic alert"),
+        (whatsapp_settings(), "+41791234567", ""),
+        (whatsapp_settings(), "+41791234567", "x" * 2001),
+    ]:
+        with pytest.raises(ProviderError):
+            await CallMeBotWhatsApp(settings, transport).send(phone, message)
+
+
+async def test_callmebot_timeout_and_network_error_have_safe_traceback():
+    async def slow(request):
+        await asyncio.sleep(10)
+        return httpx.Response(200)
+
+    def failed(request):
+        raise httpx.ReadError("Private URL " + str(request.url), request=request)
+
+    settings = whatsapp_settings().model_copy(update={"request_timeout_seconds": 0.02})
+    for handler in (slow, failed):
+        with pytest.raises(ProviderError) as error:
+            await CallMeBotWhatsApp(settings, httpx.MockTransport(handler)).send(
+                "+41791234567", "Private content"
+            )
+        assert error.value.code == "transport_error"
+        assert not error.value.retryable
+        formatted = "".join(traceback.format_exception(error.value))
+        assert "fake-callmebot" not in formatted
+        assert "apikey=" not in formatted
 
 
 def test_configuration_alias_google_only_and_contacts_validation():

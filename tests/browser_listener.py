@@ -12,7 +12,7 @@ from pathlib import Path
 import uvicorn
 from playwright.async_api import async_playwright
 from pydantic import SecretStr
-from support import DemoFactory, assessment, simulation_settings
+from support import DemoFactory, FakeWhatsApp, assessment, simulation_settings
 
 from scam_the_scamers.main import create_app
 from scam_the_scamers.providers import ProviderError, TranscriptEvent
@@ -62,8 +62,9 @@ async def wait_browser(page, expression, deadline_ms=5000):
 
 
 async def main():
-    settings = simulation_settings(max_session_seconds=60)
+    settings = simulation_settings(max_session_seconds=60, callmebot_api_key="", guardian_phone="")
     factory = DemoFactory(settings, assessment(49))
+    assert isinstance(factory.whatsapp, FakeWhatsApp), "Browser tests must never send WhatsApp"
     app = create_app(settings, factory)
     sock = socket.socket()
     sock.bind(("127.0.0.1", 0))
@@ -90,6 +91,28 @@ async def main():
                 assert await page.locator("#listener-panel").is_visible()
                 assert await page.locator("#tools-panel").is_visible()
                 assert "not configured" in await page.locator("#fallback-status").inner_text()
+                assert "WhatsApp disabled" in await page.locator("#whatsapp-status").inner_text()
+                await page.locator("#guardian-phone").fill("wrong-number")
+                assert await page.locator("#guardian-phone").get_attribute("aria-invalid") == "true"
+                assert "Invalid phone" in await page.locator("#whatsapp-status").inner_text()
+                assert (
+                    "without WhatsApp until corrected"
+                    not in await page.locator("#whatsapp-status").inner_text()
+                )
+                for phone in ("+41791234567", "079 123 45 67", "0041 79 123 45 67"):
+                    await page.locator("#guardian-phone").fill(phone)
+                    assert (
+                        await page.locator("#guardian-phone").get_attribute("aria-invalid")
+                        == "false"
+                    )
+                    status = await page.locator("#whatsapp-status").inner_text()
+                    assert "next screening session" in status
+                    assert "Server WhatsApp configuration: not configured" in status
+                    assert "API key" in status
+                assert not factory.whatsapp.calls, (
+                    "Editing guardian settings must not send messages"
+                )
+                await page.locator("#guardian-phone").fill("")
                 assert await page.locator("#overall-score").inner_text() == "—"
                 await page.locator("#caller-number").fill("+12013759200")
                 await page.get_by_role("button", name="Check number", exact=True).click()
@@ -103,12 +126,15 @@ async def main():
                     "shalom_karr_ai_blocklist" in await page.locator("#caller-result").inner_text()
                 )
                 assert await page.locator("#overall-score").inner_text() == "—"
-                assert not factory.sessions and not factory.email.calls
+                assert (
+                    not factory.sessions and not factory.email.calls and not factory.whatsapp.calls
+                )
                 await page.locator("#caller-number").fill("")
                 assert await page.locator("#risk-panel").get_attribute("data-risk") == "unavailable"
                 await page.screenshot(path=str(artifacts / "listener-desktop.png"), full_page=True)
                 factory.classifier.delay = 0.4
                 await page.get_by_role("button", name="Enable listener").click()
+                assert await page.locator("#guardian-phone").is_disabled()
                 await wait_browser(page, "document.querySelector('#orb').dataset.state === 'armed'")
                 await page.wait_for_timeout(500)
                 assert not factory.sessions, "Silence must never open a provider session"
@@ -228,6 +254,8 @@ async def main():
                 await asyncio.sleep(0.1)
                 assert not app.state.registry.sockets
                 assert factory.sessions[0].closed
+                assert await page.locator("#guardian-phone").is_enabled()
+                assert not factory.whatsapp.calls
                 print(
                     "Browser: trigger, risk scores/colors, low-risk no TTS, warning playback, "
                     "feedback suppression, cancellation, end/rearm and pause passed",
@@ -235,26 +263,63 @@ async def main():
                 )
 
                 factory.classifier.result = assessment(20)
-                # A fake accepted provider response, never a real email, exercises the banner.
+                # Only injected fake providers exercise accepted messages, never real sends.
                 settings.resend_api_key = SecretStr("offline")
                 settings.alert_from_email = SecretStr("alerts@example.org")
                 settings.fallback_email = SecretStr("guardian@example.org")
+                settings.callmebot_api_key = SecretStr("offline")
+                settings.guardian_phone = SecretStr("+41791234567")
+                factory.whatsapp.delay = 0.8
                 await page.reload()
                 await wait_browser(page, "!document.querySelector('#toggle').disabled")
                 await page.get_by_role("button", name="Listener", exact=True).click()
+                assert await page.locator("#guardian-phone").input_value() == "+41791234567"
+                assert "WhatsApp configured" in await page.locator("#whatsapp-status").inner_text()
+                await page.locator("#guardian-phone").fill("+41791234568")
+                assert not factory.whatsapp.calls
                 await page.locator("#caller-number").fill("+12013759200")
                 # Restart and verify the automatic idle return, with a real worklet clock.
                 await page.get_by_role("button", name="Enable listener").click()
                 await wait_browser(page, "document.querySelector('#orb').dataset.state === 'armed'")
                 await page.evaluate("testAudio.gain.gain.value = 0.12")
                 await wait_browser(
+                    page, "document.querySelector('#node-callmebot').dataset.active === 'true'"
+                )
+                assert await page.locator("#tool-callmebot").inner_text() == "sending"
+                assert (
+                    await page.locator(".flow-lines [data-to='callmebot']").get_attribute(
+                        "data-active"
+                    )
+                    == "true"
+                )
+                await wait_browser(
+                    page,
+                    "document.querySelector('#guardian-note').textContent"
+                    ".includes('Email (Resend)')",
+                )
+                assert "WhatsApp" not in await page.locator("#guardian-note").inner_text()
+                await wait_browser(
                     page, "document.querySelector('#overall-score').textContent === '20 / 100'"
+                )
+                await wait_browser(
+                    page,
+                    "document.querySelector('#guardian-note').textContent"
+                    ".includes('WhatsApp (CallMeBot)')",
                 )
                 await wait_browser(page, "!document.querySelector('#guardian-banner').hidden")
                 assert await page.locator("#risk-panel").get_attribute("data-risk") == "red"
                 banner = await page.locator("#guardian-message").inner_text()
                 assert banner.startswith("Guardian alerted at ") and banner.endswith(" — High")
                 assert len(factory.email.calls) == 1
+                assert len(factory.whatsapp.calls) == 1
+                assert factory.whatsapp.calls[0][0] == "+41791234568"
+                assert "Email (Resend): High" in await page.locator("#guardian-note").inner_text()
+                assert (
+                    "WhatsApp (CallMeBot): High"
+                    in await page.locator("#guardian-note").inner_text()
+                )
+                assert await page.locator("#node-callmebot").get_attribute("data-active") == "false"
+                assert await page.locator("#tool-callmebot").inner_text() == "accepted"
                 assert "unverified" in await page.locator("#guardian-banner").inner_text()
                 assert await page.locator("#guardian-banner").is_visible()
                 await page.set_viewport_size({"width": 390, "height": 844})
@@ -287,6 +352,7 @@ async def main():
                 assert len(factory.sessions) == 2 and factory.sessions[1].closed
                 assert "30 seconds of quiet" in await page.locator("#activity-log").inner_text()
                 await page.get_by_role("button", name="Pause listener").click()
+                factory.whatsapp.delay = 0
                 await page.set_viewport_size({"width": 390, "height": 844})
                 await page.screenshot(path=str(artifacts / "listener-mobile.png"), full_page=True)
                 assert await page.evaluate("document.documentElement.scrollWidth <= innerWidth")
@@ -309,6 +375,8 @@ async def main():
                 # An actual fake-provider error is visible; no fictional score survives.
                 await page.get_by_role("button", name="Listener", exact=True).click()
                 factory.classifier.error = ProviderError("gemini", "synthetic failure")
+                settings.resend_api_key = SecretStr("")
+                factory.whatsapp.failures = [ProviderError("callmebot", "credentials_rejected")]
                 await page.get_by_role("button", name="Enable listener").click()
                 await wait_browser(page, "document.querySelector('#orb').dataset.state === 'armed'")
                 await page.evaluate("testAudio.gain.gain.value = 0.12")
@@ -320,10 +388,49 @@ async def main():
                 assert await page.locator("#risk-panel").get_attribute("data-risk") == "red"
                 assert "Listed number" in await page.locator("#risk-warning").inner_text()
                 assert await page.locator("#tool-gemini").inner_text() == "error"
+                await wait_browser(
+                    page, "document.querySelector('#tool-callmebot').textContent === 'error'"
+                )
+                assert await page.locator("#node-callmebot").get_attribute("data-active") == "false"
+                assert not await page.locator("#guardian-banner").is_visible()
                 await page.get_by_role("button", name="Pause listener").click()
                 await asyncio.sleep(0.1)
                 assert factory.stts[-1].closed
                 factory.classifier.error = None
+
+                # An ambiguous provider response must never look like confirmed acceptance.
+                factory.whatsapp.failures = [ProviderError("callmebot", "acceptance_unconfirmed")]
+                await page.get_by_role("button", name="Enable listener").click()
+                await wait_browser(page, "document.querySelector('#orb').dataset.state === 'armed'")
+                await page.evaluate("testAudio.gain.gain.value = 0.12")
+                await wait_browser(
+                    page, "document.querySelector('#tool-callmebot').textContent === 'unknown'"
+                )
+                assert await page.locator("#node-callmebot").get_attribute("data-active") == "false"
+                assert not await page.locator("#guardian-banner").is_visible()
+                await page.get_by_role("button", name="Pause listener").click()
+
+                # Pausing must clear a real in-flight indicator without claiming delivery.
+                factory.whatsapp.delay = 10
+                await page.get_by_role("button", name="Enable listener").click()
+                await wait_browser(page, "document.querySelector('#orb').dataset.state === 'armed'")
+                await page.evaluate("testAudio.gain.gain.value = 0.12")
+                await wait_browser(
+                    page, "document.querySelector('#tool-callmebot').textContent === 'sending'"
+                )
+                await page.get_by_role("button", name="Pause listener").click()
+                assert await page.locator("#node-callmebot").get_attribute("data-active") == "false"
+                assert (
+                    await page.locator("#tool-callmebot").get_attribute("data-status") == "unknown"
+                )
+                assert "delivery unknown" in await page.locator("#tool-callmebot").inner_text()
+                assert not await page.locator("#guardian-banner").is_visible()
+                factory.whatsapp.delay = 0
+                print(
+                    "Browser: guardian phone, no sends on edits, per-channel acceptance, "
+                    "WhatsApp sending/accepted/error/unknown/stopped and no false banner passed",
+                    flush=True,
+                )
 
                 # Denied access must be actionable and must not create a provider session.
                 await page.evaluate(
@@ -353,6 +460,8 @@ async def main():
                             "missing": ["GRADIUM_API_KEY"],
                             "email_status": "not_configured",
                             "fallback_email": "",
+                            "whatsapp_status": "not_configured",
+                            "guardian_phone": "",
                             "caller_default_region": "CH",
                             "max_session_seconds": 60,
                         }

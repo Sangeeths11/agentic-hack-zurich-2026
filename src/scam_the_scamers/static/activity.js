@@ -101,7 +101,7 @@ setView(window.matchMedia("(max-width: 760px)").matches ? "listener" : "split");
 
 export function showTool(event) {
   const tool = event.tool === "db" ? "lookup" : event.tool;
-  const labels = { backend: "Backend", stt: "Gradium STT", gemini: "Gemini", lookup: "Number database", scoring: "Local scoring", tts: "Gradium TTS", resend: "Resend email" };
+  const labels = { backend: "Backend", stt: "Gradium STT", gemini: "Gemini", lookup: "Number database", scoring: "Local scoring", tts: "Gradium TTS", resend: "Resend email", callmebot: "CallMeBot WhatsApp" };
   if (!labels[tool] || typeof event.status !== "string") return;
   const status = $(tool === "backend" ? "agent-status" : `tool-${tool === "lookup" ? "db" : tool}`);
   const node = $(tool === "backend" ? "agent-stage" : `node-${tool}`);
@@ -121,13 +121,20 @@ function setEdge(tool, active) {
 }
 
 export function resetTools(disconnected = false) {
-  for (const tool of ["lookup", "stt", "gemini", "scoring", "tts", "resend"]) {
+  for (const tool of ["lookup", "stt", "gemini", "scoring", "tts", "resend", "callmebot"]) {
     const node = $(`node-${tool}`);
     node.dataset.active = "false";
     delete node.dataset.status;
     setEdge(tool, false);
-    if (tool === "resend") continue; // Keep missing configuration visible.
     const status = $(`tool-${tool === "lookup" ? "db" : tool}`);
+    if (["resend", "callmebot"].includes(tool)) {
+      if (disconnected && status.dataset.status === "sending") {
+        status.textContent = "Stopped · delivery unknown";
+        status.dataset.status = "unknown";
+        node.dataset.status = "unknown";
+      }
+      continue; // Keep configuration and completed outcomes visible.
+    }
     delete status.dataset.status;
     if (tool === "lookup") {
       if (!disconnected) status.textContent = "Not checked";

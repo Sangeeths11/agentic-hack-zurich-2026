@@ -1,5 +1,59 @@
 # Live scam screening: evidence and demo
 
+## Guardian WhatsApp follow-up
+
+Implemented on `feat/whatsapp-guardian-alerts` from `b770f03` on 2026-10-10 with
+three explicitly requested sub-agents. All preceding lookup, additive scoring,
+independent flag, transcript and activity features remain included.
+
+CallMeBot receives bounded, encoded HTTPS requests with a server-held key and the
+guardian selected before the session. Swiss/other configured national formats and
+international prefixes normalize on the backend. The UI locks the contact while
+listening and never persists edits or sends a message merely from editing it.
+Missing settings remain visible without blocking screening. Supplied configuration
+was saved only to ignored local files; neither credentials nor private contacts
+appear in tracked source or the built wheel. Exact local checkpoint redactions were
+added for the supplied values before committing.
+
+Messages use actual scores and criterion labels, plus independent scam/number flags.
+They do not invent voice matching, identities, amounts, listen-in links, callback
+numbers or warning playback. WhatsApp tiers 50/75/90 are independent of Resend;
+direct jumps, pending coalescing and score jitter do not duplicate attempted tiers.
+CallMeBot has no documented idempotency key, so ambiguous sends are not retried.
+Only the documented terminal queue acknowledgement emits a success banner. HTTP 200,
+configuration, errors and timeouts do not establish acceptance or delivery. The UI
+tracks each channel's acceptance and retains the highest accepted severity.
+
+Executed checks:
+
+| Check | Result |
+| --- | --- |
+| `uv run ruff check src tests` | Passed |
+| `uv run ruff format --check src tests` | Passed, 24 files |
+| `uv run mypy src` | Passed, 12 source files |
+| `uv run pytest -q` | 210 passed; one existing upstream TestClient deprecation warning |
+| `node --test tests/test_browser_audio.mjs` | 19 passed |
+| `uv build` | Source distribution and wheel built |
+| Offline Chrome harness | 5 synthetic sessions, zero page errors; fake WhatsApp acceptance, dual-channel banners, national/international recipient forms, missing-key visibility, graph and mobile layout, pause during an in-flight send |
+| Runner comparison excluding `prompt.template` | All six schemas/settings/output contracts preserved |
+| Tracked-source and wheel private-value scan | Passed; local configuration and redaction files remain ignored |
+| Restarted localhost health/readiness/config checks | Passed; configured guardian default loaded; key absent from public config; no screening initiated |
+
+Provider tests exercise encoded Unicode messages, exact destination, request-log
+privacy, real documented response shape, redirects/rejections, ambiguous acknowledgements,
+bounded bodies/timeouts and cancellation. Session tests cover cross-channel independence,
+region normalization, disabled/invalid settings, flags, cleanup and new-session reset.
+The live audio harness now explicitly disables both messaging channels regardless of
+local environment settings. **No real WhatsApp or email was sent.** CallMeBot credential
+validity, queue acceptance and handset delivery remain unverified; existing Gradium/
+Gemini synthetic live evidence is retained below and was not unnecessarily rerun.
+
+Entire capture still resolves to the executing session and latest request; doctor
+reports trusted Codex hook approval records and working Git hooks. Brain was refreshed
+with `--agent none --raw` from the clean starting checkout. Runner prompts now cover
+CallMeBot's retry/acceptance and privacy contracts. Hosted Trails still returns 404;
+no hosted evaluation or hackathon score is claimed.
+
 ## Additive scoring and live visibility follow-up
 
 Implemented on `feat/live-screening-alerts` from `main` commit `c091487` on
