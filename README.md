@@ -1,5 +1,7 @@
 # Scam the Scammers
 
+<img src="src/scam_the_scamers/static/logo.png" alt="Scam the Scammers" width="360" />
+
 A local call-screening companion. Answer a call on your phone, turn on
 speakerphone, and place your laptop nearby. The browser microphone sends audio
 through the backend to Gradium STT. Gemini scores six warning signs; scores
@@ -9,6 +11,18 @@ There are no greetings or open-ended agent replies.
 The display name and command are **Scam the Scammers** / `scam-the-scammers`.
 The old command remains an alias for existing launchers; the internal Python module
 keeps its existing import path.
+
+## What it does
+
+- Starts screening when the laptop microphone detects sustained sound.
+- Transcribes the conversation with Gradium and assesses six scam warning signs with Gemini.
+- Shows the calculated total, individual evidence scores, transcript and real provider activity.
+- Uses family context and emergency contacts entered in the web UI.
+- Plays eligible spoken cautions and sends configured guardian alerts through WhatsApp or email.
+- Checks a supplied caller number against the bundled suspicious-number database.
+
+This is a warning aid, not a fraud verdict. It cannot detect whether a phone call
+was answered or verify a speaker's identity. Verify suspicious requests independently.
 
 ## Verified integration status
 
@@ -43,6 +57,24 @@ scripts/setup.sh
 scripts/run_local.sh
 ```
 
+The minimum provider configuration in `.env` is:
+
+```dotenv
+GRADIUM_API_KEY=your_gradium_key
+GEMINI_API_KEY=your_gemini_key
+```
+
+To enable WhatsApp, also configure the activated recipient and its matching key:
+
+```dotenv
+GUARDIAN_PHONE=+<country_code_and_number>
+CALLMEBOT_API_KEY=your_recipient_specific_key
+```
+
+Replace these placeholders with your own values. Keep `.env` private and restart
+the server after changing it. Additional contacts and optional email configuration
+are described below.
+
 Open **http://localhost:8082**. Optionally enter the caller's phone number and click **Check number** for an immediate
 local lookup, configure the guardian WhatsApp number and check the messaging status,
 then click **Enable listener**, and allow microphone access.
@@ -50,10 +82,15 @@ Keep the tab open and computer awake. Sound above the adjustable threshold for
 180 ms starts screening; a bounded pre-roll preserves the start of speech.
 Ringing or music can trigger it. The app cannot detect call acceptance or caller ID.
 
-The responsive workspace opens in **Listener**, with microphone controls, risk scores
-and the screening flow. **Tools & activity** holds personal settings, the transcript
-and the activity log; **Split view** shows both workspaces. Switching views does not
-interrupt audio. Scores start as waiting, never invented zeroes.
+The responsive workspace opens in **Listener**:
+
+| View | What you can do |
+| --- | --- |
+| **Listener** | Start or pause capture, check a caller number, view all six scores and follow the screening flow. |
+| **Tools & activity** | Edit personal settings and emergency contacts, adjust alert thresholds, and read the transcript and activity log. |
+| **Split view** | Use both workspaces together; cards scroll when their contents exceed the available space. |
+
+Switching views does not interrupt audio. Scores start as waiting, never invented zeroes.
 A live pipeline graph highlights actual microphone, backend, SQLite, Gradium STT,
 Gemini, local scoring, Gradium TTS, playback, CallMeBot and Resend activity. Streaming connections
 and individual requests have distinct states. The most recent 60 events stay only in
@@ -70,6 +107,19 @@ cancels work, stops playback and releases the microphone. The server enforces a
 capture time limit, provider/media timeouts and a concurrency limit. Finalization
 has at most the request timeout plus 15 seconds of grace; pause/disconnect still
 cancels immediately during that grace period.
+
+### First-use checklist
+
+1. Open **Tools & activity**, enter your family context and emergency contacts, and
+   review the extracted contact cards.
+2. Check each contact's messaging configuration and choose your alert thresholds.
+3. Return to **Listener**, put the phone on speaker nearby, and click **Enable listener**.
+4. Follow the scores and activity. **End screening** finishes the current session
+   while continuing to listen; **Pause listener** releases the microphone.
+
+Enabling the listener allows real alerts to configured contacts. For a demonstration
+without sending messages, leave messaging credentials unconfigured. The automated
+browser checks use synthetic audio and fake providers instead.
 
 ## Personal settings and emergency contacts
 
