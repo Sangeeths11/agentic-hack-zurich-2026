@@ -99,3 +99,80 @@ Tests use synthetic audio and require no API keys. The browser test covers
 automatic activation, playback, interruptions, pausing, returning to listening
 after silence, denied microphone access, live activity, and switching workspace
 views while a conversation is active.
+
+## Entire at the hackathon
+
+Entire records development sessions and reviews changes. It is developer tooling,
+separate from the voice agent and its Tools & activity panel. The repository ships
+Codex capture hooks, shared Graph/Brain guidance, and six Trail runners for
+confidence, risk, security, drift, review and a change summary. The runner prompts
+focus on our audio pipeline, privacy, session cleanup and demonstrated validation.
+Runner metrics are not the hackathon jury score.
+
+Follow the [event guide](https://hack.entire.io/agentic-ai-hack-zurich-2026/)
+and [Entire quickstart](https://docs.entire.io/quickstart). Each teammate needs to:
+
+1. Install the Entire CLI using its official installer and run `entire login`.
+2. Connect their GitHub account in Entire. The repository owner/admin must give
+   the Entire GitHub App access to `simonthor/agentic-hack-zurich-2026` and import
+   that repository. Existing GitHub collaborator permissions determine access.
+3. Install local hooks from this checkout:
+
+   ```bash
+   entire enable --agent codex --yes --telemetry=false --absolute-git-hook-path
+   entire doctor
+   ```
+
+   Start Codex from the repository root, open `/hooks`, review and trust the
+   seven Entire hooks, then start a fresh session. Installed hooks alone do not
+   prove capture is running; verify a real checkpoint after making a change.
+4. Ask the Entire team for Trails access using the event's access form. In the
+   repository's Entire **Settings → General**, enable **Runners**, **Auto build
+   on push**, and **Trails**. These switches require repository admin access.
+   The checked-in `.entire/runners/` files are already tailored; running
+   `entire runner setup -y` again can overwrite their prompts.
+5. Create a Trail on the working branch, commit a focused change, link the
+   captured session when prompted, and push. Verify the checkpoint and inspect
+   the actual Runner results in Entire:
+
+   ```bash
+   entire trail create
+   # Make and review a real change, then git add / git commit / git push.
+   entire checkpoint list
+   entire checkpoint explain HEAD
+   entire doctor
+   ```
+
+   CLI login and committed runner files are not enough: the repository must be
+   connected, Trails enabled, and a pushed Trail evaluated before calling the
+   online setup complete. If no checkpoint exists, check hook trust and start a
+   fresh supported Codex session. Do not fabricate a session or test result.
+
+For local code discovery and retained project decisions, install Graph with
+`entire plugin install graph` and Brain using the official installer linked in
+the event guide. From a clean, committed checkout:
+
+```bash
+entire graph init-agents --repo .
+entire brain setup --agent none --no-backfill --no-daemon
+entire brain init-agents
+entire brain brief "Understand the local listener and its constraints" --json
+entire graph search --repo . --profile full --query "microphone session cleanup"
+```
+
+Brain is initialized without background model jobs or a machine-wide daemon.
+Refresh it with `entire brain refresh --agent none` after new checkpoints or
+important commits. Record lasting decisions with `entire brain remember` and an
+explicit `--path`. Re-run `entire brain setup` after the generated instruction
+files are committed if it reports a dirty-worktree indexing error.
+
+Checkpoint metadata is pushed alongside development work. Built-in secret
+redaction remains enabled, with email and phone-number redaction added. Keep
+credentials and real call recordings out of development transcripts and screenshots;
+image contents are not redacted. Historical imports are labeled read-only history,
+not evidence that live hooks captured a session.
+
+For the demo, show the listener, a real captured checkpoint, its passing validation,
+and the Trail's actual findings. Demonstrate a useful Graph lookup or Brain recall.
+Report measured results and clearly distinguish synthetic audio checks from a real
+phone-on-speaker test.
