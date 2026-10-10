@@ -1,0 +1,59 @@
+Prompt 3:
+
+Use the callmebot API to send a whatsapp message to the guardian when the call is flagged as dangerous. The guardian phone number should be configurable in the web UI. The API for callmebot is:
+
+- [https://api.callmebot.com/whatsapp.php?phone=REDACTED&text=\[message\]&apikey=](https://api.callmebot.com/whatsapp.php?phone=REDACTED\&text=\[message]\&apikey=)REDACTED 
+- The API key is REDACTED
+
+Example message:
+
+ **🟡 Amber (score 50+)**
+
+> ⚠️ Scam the Scammer Alert\
+> &#x20;A call to Margaret is showing suspicious patterns.\
+> &#x20;Score: 52/100\
+> &#x20;🔸 Caller claims to be Tyler\
+> &#x20;🔸 Emotional distress detected\
+> &#x20;🔸 Money requested (CHF 5,000)\
+> &#x20;Call is live — listen in at app.scamthescammer.ch
+
+**🔴 Red (score 75+)**
+
+> 🚨 Scam the Scammer — RED ALERT\
+> &#x20;Call to Margaret is highly suspicious.\
+> &#x20;Score: 84/100\
+> &#x20;🔴 Voice does not match Tyler (34%)\
+> &#x20;🔴 Urgency — “within the hour”\
+> &#x20;🔴 Secrecy — “don’t tell Mum and Dad”\
+> &#x20;🔴 Cash courier pickup requested\
+> &#x20;Warning has been played to Margaret.\
+> &#x20;Call her now: +41 44 XXX XX XX
+
+**🔴🔴 Critical (score 90+)**
+
+> 🆘 SCAM THE SCAMMER — CRITICAL\
+> &#x20;This call is very likely a scam.\
+> &#x20;Score: 95/100 — ALL criteria flagged.\
+> &#x20;Margaret has been warned to hang up.\
+> &#x20;CALL HER NOW: +41 44 XXX XX XX
+
+
+
+this is the fixed stuff you need to do. Just check, please use it entirely, very correctly, and usefully, like how the hackathon wants. Use your sub-agents to work quickly, correctly, and faster, and implement all the features that we mentioned above.
+
+[https://entire.io/gh/Sangeeths11/agentic-hack-zurich-2026](https://entire.io/gh/Sangeeths11/agentic-hack-zurich-2026)
+
+---
+
+Can you merge that please in main?
+
+---
+
+Make the warning voice message more personalized. For this, there should be a text box called “Settings” on the website from which the user can write personal information, such as emergency contact details, who they are, and more information about themselves. This should also be fed into the prompt for the call classification to decide if the call is suspicious. For example, if the caller makes mistakes about the family, it should use this for flagging. Also, the phone numbers to family members should be included here, so it should use those phone numbers when sending warning messages to Whatsapp. These emergency contacts should be displayed in the UI so that it is intuitive for the user. For example, “Emergency contact 1: +41 … (Emily, daughter), Emergency contact 2: +41 … (Jonas, son)”. If you want this UI to be dynamic, Gemini could even return HTML that is dynamically rendered on the web page. If it is complicated, just have a fixed template and Gemini just returns the fields to fill in in this template. Start with the easy one first. Whenever this configuration text box is changed, it should reread that part and update the configurations.
+Fix the typo in “Scam the scamers” to “Scam the scammers”. Fix any other typos that exist.
+The user should also be able to change the threshold for the sensitivity of warnings and when to trigger whatsapp messages etc.
+The live transcripts should indicate who is talking, not just a continuous stream. These should be on separate lines.
+The whatsapp message should be more personalized that summarizes the conversation. Not just specifying what the problems are. Also, for some reason it sends two messages in one on whatsapp if they happen close to each other in time. Can this be mitigated?
+
+Create a new branch, and this is the fixed stuff you need to do. Just check, please use it entirely, very correctly, and usefully, like how the hackathon wants. Use your sub-agents to work quickly, correctly, and faster, and implement all the features that we mentioned above.
+[https://entire.io/gh/Sangeeths11/agentic-hack-zurich-2026](https://entire.io/gh/Sangeeths11/agentic-hack-zurich-2026)

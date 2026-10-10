@@ -1,0 +1,56 @@
+{
+  "cli_version": "0.11.4",
+  "checkpoint_id": "01M4K6RPXZGPTQ0VEAT1JDV33N",
+  "strategy": "manual-commit",
+  "branch": "feat/personalized-screening",
+  "checkpoints_count": 2,
+  "files_touched": [
+    ".env.example",
+    "AGENTS.md",
+    "README.md",
+    "docs/live-scam-screening-task.md",
+    "pyproject.toml",
+    "src/scam_the_scamers/agent.py",
+    "src/scam_the_scamers/alerts.py",
+    "src/scam_the_scamers/bridge.py",
+    "src/scam_the_scamers/cli.py",
+    "src/scam_the_scamers/config.py",
+    "src/scam_the_scamers/main.py",
+    "src/scam_the_scamers/profiles.py",
+    "src/scam_the_scamers/providers.py",
+    "src/scam_the_scamers/risk.py",
+    "src/scam_the_scamers/static/index.html",
+    "src/scam_the_scamers/static/listener.css",
+    "src/scam_the_scamers/static/listener.js",
+    "src/scam_the_scamers/static/personal-settings.js",
+    "src/scam_the_scamers/static/screening.js",
+    "tests/browser_listener.py",
+    "tests/live_browser_listener.py",
+    "tests/support.py",
+    "tests/test_agent.py",
+    "tests/test_browser_audio.mjs",
+    "tests/test_lifecycle.py",
+    "tests/test_listener.py",
+    "tests/test_personalized_session.py",
+    "tests/test_profile_integration_review.py",
+    "tests/test_profiles.py",
+    "tests/test_providers.py"
+  ],
+  "sessions": [
+    {
+      "metadata": "/0/metadata.json",
+      "transcript": "/0/full.jsonl",
+      "compact_transcript": "/0/transcript.jsonl",
+      "content_hash": "/0/content_hash.txt",
+      "prompt": "/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 145492,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 7235456,
+    "output_tokens": 29021,
+    "api_call_count": 76,
+    "subagent_tokens_complete": false
+  }
+}
