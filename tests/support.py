@@ -25,6 +25,9 @@ def simulation_settings(**overrides) -> Settings:
         fallback_email="",
         callmebot_api_key="",
         guardian_phone="",
+        callmebot_recipient_keys="",
+        whatsapp_debounce_seconds=0,
+        whatsapp_cooldown_seconds=0,
     )
     values.update(overrides)
     return Settings(_env_file=None, **values)
@@ -81,11 +84,15 @@ class FakeClassifier:
     def __init__(self, result=None):
         self.result = result or assessment()
         self.calls = []
+        self.contexts = []
+        self.started = asyncio.Event()
         self.delay = 0
         self.error = None
 
-    async def classify(self, transcript, caller):
+    async def classify(self, transcript, caller, **context):
         self.calls.append((transcript, caller))
+        self.contexts.append(context)
+        self.started.set()
         if self.delay:
             await asyncio.sleep(self.delay)
         if self.error:
@@ -155,8 +162,22 @@ class DemoFactory(ScreeningFactory):
         self.stts.append(stt)
         return stt
 
-    async def open(self, caller, session_id, *, guardian_phone=None):
-        session = await super().open(caller, session_id, guardian_phone=guardian_phone)
+    async def open(
+        self,
+        caller,
+        session_id,
+        *,
+        guardian_phone=None,
+        preferences=None,
+        preferences_provider=None,
+    ):
+        session = await super().open(
+            caller,
+            session_id,
+            guardian_phone=guardian_phone,
+            preferences=preferences,
+            preferences_provider=preferences_provider,
+        )
         self.sessions.append(session)
         return session
 

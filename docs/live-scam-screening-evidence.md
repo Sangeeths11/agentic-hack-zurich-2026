@@ -1,5 +1,59 @@
 # Live scam screening: evidence and demo
 
+## Resumed personalized guardian screening
+
+Continued the interrupted working tree on `feat/personalized-screening` from
+`1c06373` on 2026-10-10, with three sub-agents requested by the user. This section
+supersedes the older single-recipient, pre-session-only settings behavior below.
+
+The verified flow is: edit guardian/personal settings in the browser, accept bounded
+server-memory preferences, reassess the active conversation, select eligible contacts
+and severity, send a recipient-bound CallMeBot request, then display provider acceptance.
+The supplied default recipient and key already existed in ignored `.env` with mode
+`0600`; configuration was checked without sending messages or printing either value.
+
+Personal settings provide contact cards, family context and live warning/WhatsApp
+thresholds. Each additional recipient requires its own server-side key. Gemini summaries
+and inferred speaker roles are attributed; original transcript segments retain stable
+IDs. Fixed personalized warnings and WhatsApp messages do not claim acoustic identity
+matching, a listen-in service, or completed warning playback. The banner now says
+**Guardian alert accepted**, with delivery explicitly unverified.
+
+Review corrected fallback sessions that ignored server WhatsApp threshold/cooldown
+settings, and rejected stale/equal preference updates in the alert manager. Settings
+changes invalidate unsent contact work. TTS now rechecks cancellation and settings
+revision after potentially blocked activity publication, before invoking Gradium;
+obsolete warning audio already queued in the session is discarded on receive.
+
+| Boundary/check | Executed evidence |
+| --- | --- |
+| Browser → settings API → active session | Offline Chrome: extracted contacts, live preference changes, stale response rejection and settings failures |
+| Assessment → recipient selection | Synthetic regressions: independent scam/number flags, configurable threshold, 50/75/90 tiers, contact removal and recipient-specific keys |
+| Recipient → CallMeBot | Fake transport: encoded requests, bounded timeouts/responses, exact destination, queue acknowledgement, no ambiguous-send retry |
+| Response → browser | Mock acceptance for two contacts and both channels; explicit acceptance banner; error, unknown and stopped states |
+| `uv run ruff check src tests` | Passed |
+| `uv run ruff format --check src tests` | Passed, 28 files |
+| `uv run mypy src` | Passed, 13 source files |
+| `uv run pytest -q` | 274 passed; one upstream Starlette/httpx TestClient deprecation warning |
+| `node --test tests/test_browser_audio.mjs` | 22 passed |
+| `uv build` | Source distribution and wheel built |
+| `uv run --with playwright python tests/browser_listener.py` | 6 synthetic sessions; no page errors |
+| Local server HTTP checks | Health/readiness, page/assets and profile/config passed; key absent from public responses; no screening initiated |
+| Runner JSON comparison | All six schemas/settings/output contracts preserved; only prompt templates changed |
+| Candidate source and wheel private-value scan | Passed; supplied key and recipient absent |
+
+The live audio harness disables both messaging providers, including the additional
+recipient-key map. **No real WhatsApp or email was sent in this continuation.** Live
+CallMeBot acceptance/delivery, physical phone acoustics and fraud calibration remain
+unverified. Earlier Gradium/Gemini live synthetic evidence below was not rerun.
+
+Entire resolved the executing active session and latest prompt. Doctor reported Git
+hooks OK and Codex hook approval records present, plus an older ended session with
+uncondensed checkpoint data. Brain reported a stale branch tip and dirty/unindexed
+working tree at entry, so current source and executed tests supplied the evidence.
+Authenticated repository inspection reported both Entire mirrors ready. Hosted
+Trails still returned repository-not-found HTTP 404; no hosted evaluation is claimed.
+
 ## Guardian WhatsApp follow-up
 
 Implemented on `feat/whatsapp-guardian-alerts` from `b770f03` on 2026-10-10 with

@@ -5,6 +5,7 @@ import audioop
 import base64
 import json
 import logging
+import math
 import re
 from contextvars import ContextVar
 from dataclasses import dataclass
@@ -15,6 +16,7 @@ from websockets.asyncio.client import ClientConnection, connect
 
 from .caller import CallerLookup
 from .config import Settings, normalize_guardian_phone
+from .profiles import PersonalProfile
 from .risk import SYSTEM_PROMPT, Assessment
 
 
@@ -28,6 +30,7 @@ class ProviderError(RuntimeError):
 class TranscriptEvent:
     kind: str
     text: str = ""
+    start_s: float | None = None
 
 
 class STTSession(Protocol):
@@ -38,7 +41,15 @@ class STTSession(Protocol):
 
 
 class Classifier(Protocol):
-    async def classify(self, transcript: str, caller: CallerLookup) -> Assessment: ...
+    async def classify(
+        self,
+        transcript: str,
+        caller: CallerLookup,
+        *,
+        profile: PersonalProfile | None = None,
+        warning_threshold: float | None = None,
+        segments: list[dict] | None = None,
+    ) -> Assessment: ...
 
 
 class Speech(Protocol):
@@ -89,7 +100,7 @@ class CallMeBotWhatsApp:
         params = {
             "phone": normalize_guardian_phone(phone, s.caller_default_region).lstrip("+"),
             "text": text,
-            "apikey": s.value("callmebot_api_key"),
+            "apikey": s.key_for_phone(phone),
         }
         token = _private_http.set(True)
         try:
@@ -165,8 +176,21 @@ class GeminiClassifier:
     def __init__(self, settings: Settings, transport: httpx.AsyncBaseTransport | None = None):
         self.settings, self.transport = settings, transport
 
-    async def classify(self, transcript: str, caller: CallerLookup) -> Assessment:
+    async def classify(
+        self,
+        transcript: str,
+        caller: CallerLookup,
+        *,
+        profile: PersonalProfile | None = None,
+        warning_threshold: float | None = None,
+        segments: list[dict] | None = None,
+    ) -> Assessment:
         s = self.settings
+        schema = Assessment.model_json_schema(mode="validation")
+        # Google's compatibility endpoint rejects this schema with maxItems=200
+        # on the speaker array (HTTP 400). Keep the same item schema and enforce
+        # the count in the strict local model; it also remains bounded in the prompt.
+        schema["properties"]["speaker_assignments"].pop("maxItems")
         payload = {
             "model": s.llm_model,
             "messages": [
@@ -177,7 +201,13 @@ class GeminiClassifier:
                         {
                             "untrusted_transcript": transcript,
                             "number_lookup": caller.public(),
-                            "spoken_warning_threshold": s.warning_threshold,
+                            "listener_profile": profile.model_dump(mode="json") if profile else {},
+                            "transcript_turns": segments or [],
+                            "spoken_warning_threshold": (
+                                s.warning_threshold
+                                if warning_threshold is None
+                                else warning_threshold
+                            ),
                         }
                     ),
                 },
@@ -187,10 +217,10 @@ class GeminiClassifier:
                 "json_schema": {
                     "name": "call_assessment",
                     "strict": True,
-                    "schema": Assessment.model_json_schema(mode="validation"),
+                    "schema": schema,
                 },
             },
-            "max_completion_tokens": 2048,
+            "max_completion_tokens": 4096,
         }
         async with asyncio.timeout(s.request_timeout_seconds):
             async with httpx.AsyncClient(
@@ -210,7 +240,7 @@ class GeminiClassifier:
             if choice["finish_reason"] != "stop" or message.get("refusal"):
                 raise ValueError("Blocked or incomplete")
             content = message["content"]
-            if not isinstance(content, str) or len(content) > 8192:
+            if not isinstance(content, str) or len(content) > 16384:
                 raise ValueError("Invalid content")
             return Assessment.model_validate_json(content)
         except (ValueError, KeyError, IndexError, TypeError, AttributeError) as exc:
@@ -291,7 +321,16 @@ class GradiumSTT:
             text = message.get("text")
             if not isinstance(text, str) or len(text) > 4096:
                 raise ProviderError("stt", "invalid_text")
-            return TranscriptEvent("text", text)
+            start = message.get("start_s")
+            start_s = None
+            if isinstance(start, (int, float)) and not isinstance(start, bool):
+                try:
+                    number = float(start)
+                    if math.isfinite(number) and number >= 0:
+                        start_s = number
+                except OverflowError:
+                    pass
+            return TranscriptEvent("text", text, start_s)
         if kind in {"end_text", "flushed"}:
             return TranscriptEvent("boundary")
         return TranscriptEvent("heartbeat")

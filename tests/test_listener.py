@@ -68,6 +68,9 @@ def test_guardian_phone_session_config_is_validated_without_blocking_screening(
         callmebot_api_key="fake-private-key",
         guardian_phone="+41791234567",
         caller_default_region=region,
+        callmebot_recipient_keys=json.dumps(
+            {"+41781234567": "fake-other", "+12025550123": "fake-us"}
+        ),
     )
     factory = DemoFactory(settings, assessment(75))
     with TestClient(create_app(settings, factory), base_url=LOCAL_URL) as client:

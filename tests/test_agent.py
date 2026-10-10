@@ -191,6 +191,8 @@ async def test_transcript_snapshots_are_bounded_and_context_matches_assessment_r
             "revision": 1,
             "text": "Opening context.",
             "context_truncated": False,
+            "settings_revision": 0,
+            "turns": [{"id": 1, "text": "Opening context.", "role": "unknown", "start_s": None}],
         }
         started = await next_event(session, "tool")
         assert (started.payload["tool"], started.payload["status"]) == ("gemini", "assessing")
@@ -361,7 +363,11 @@ async def test_whatsapp_failure_keeps_screening_email_and_final_results_availabl
 
 
 async def test_whatsapp_recipient_snapshot_and_session_isolation():
-    settings = simulation_settings(callmebot_api_key="fake", guardian_phone="+41791234567")
+    settings = simulation_settings(
+        callmebot_api_key="fake",
+        guardian_phone="+41791234567",
+        callmebot_recipient_keys='{"+41781234567":"fake-other"}',
+    )
     factory = DemoFactory(settings, assessment(50))
     first = await factory.open(CallerLookup("not_provided"), "first", guardian_phone="+41781234567")
     second = await factory.open(CallerLookup("not_provided"), "second", guardian_phone="")

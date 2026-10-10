@@ -33,13 +33,26 @@ export class GuardianAlerts {
   accept(event) {
     if (!validGuardianAlert(event)) return false;
     const channel = event.channel ?? "email";
-    if (event.level <= (this.accepted.get(channel)?.level ?? 0)) return false;
-    this.accepted.set(channel, { ...event, channel });
+    const key = channel === "whatsapp" && typeof event.contact_phone === "string" ? `${channel}:${event.contact_phone}` : channel;
+    if (event.level <= (this.accepted.get(key)?.level ?? 0)) return false;
+    this.accepted.set(key, { ...event, channel });
     return true;
   }
   latest() {
     return [...this.accepted.values()].sort((a, b) => b.level - a.level || Date.parse(b.accepted_at) - Date.parse(a.accepted_at))[0];
   }
+}
+export function displayTranscriptTurns(turns) {
+  if (!Array.isArray(turns) || !turns.length || turns.length > 400) return null;
+  const valid = turns.every((turn) => turn && Number.isSafeInteger(turn.id) && turn.id > 0 && typeof turn.text === "string" && ["caller", "listener", "unknown"].includes(turn.role));
+  if (!valid || turns.reduce((total, turn) => total + turn.text.length, 0) > 24000) return null;
+  if (new Set(turns.map((turn) => turn.id)).size !== turns.length) return null;
+  return turns.map((turn) => ({
+    id: turn.id,
+    text: turn.text,
+    role: turn.role,
+    ...(Number.isFinite(turn.start_s) && turn.start_s >= 0 && turn.start_s <= 3600 ? { start_s: turn.start_s } : {}),
+  }));
 }
 export class PlaybackGuard {
   constructor() { this.until = 0; }

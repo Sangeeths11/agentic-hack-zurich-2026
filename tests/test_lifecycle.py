@@ -28,7 +28,10 @@ def start(ws):
     assert ws.receive_json()["status"] == "not_provided"
     assert ws.receive_json()["status"] == "connecting"
     assert ws.receive_json()["event"] == "ready"
-    assert ws.receive_json()["tool"] == "stt"
+    event = ws.receive_json()
+    if event.get("event") == "settings_applied":
+        event = ws.receive_json()
+    assert event["tool"] == "stt"
 
 
 def receive_close(ws):
@@ -81,7 +84,7 @@ def test_parallel_sessions_isolated_and_capacity_recovers():
     assert not app.state.registry.sockets
 
 
-@pytest.mark.parametrize("audio", [b"", b"odd", b"\0" * 9602])
+@pytest.mark.parametrize("audio", [b"", b"odd", b"\0" * 9602], ids=["empty", "odd", "oversized"])
 def test_malformed_audio_closes_provider(audio):
     factory = DemoFactory()
     app = create_app(simulation_settings(), factory)
@@ -110,7 +113,15 @@ def test_stop_during_provider_start_cancels_open():
     class SlowFactory:
         cancelled = False
 
-        async def open(self, caller, session_id, *, guardian_phone=None):
+        async def open(
+            self,
+            caller,
+            session_id,
+            *,
+            guardian_phone=None,
+            preferences=None,
+            preferences_provider=None,
+        ):
             try:
                 await asyncio.sleep(30)
             finally:
@@ -129,7 +140,15 @@ def test_stop_during_provider_start_cancels_open():
 
 def test_provider_start_failure_releases_capacity():
     class BrokenFactory:
-        async def open(self, caller, session_id, *, guardian_phone=None):
+        async def open(
+            self,
+            caller,
+            session_id,
+            *,
+            guardian_phone=None,
+            preferences=None,
+            preferences_provider=None,
+        ):
             raise RuntimeError("Synthetic failure")
 
     app = create_app(simulation_settings(), BrokenFactory())
@@ -142,7 +161,15 @@ def test_provider_start_failure_releases_capacity():
 
 def test_listed_number_is_reported_before_provider_failure():
     class BrokenFactory:
-        async def open(self, caller, session_id, *, guardian_phone=None):
+        async def open(
+            self,
+            caller,
+            session_id,
+            *,
+            guardian_phone=None,
+            preferences=None,
+            preferences_provider=None,
+        ):
             assert caller.status == "matched"
             raise RuntimeError("Synthetic failure")
 
@@ -175,7 +202,15 @@ def test_disconnect_closes_provider():
 
 def test_inbound_audio_queue_is_bounded_during_slow_start():
     class SlowFactory:
-        async def open(self, caller, session_id, *, guardian_phone=None):
+        async def open(
+            self,
+            caller,
+            session_id,
+            *,
+            guardian_phone=None,
+            preferences=None,
+            preferences_provider=None,
+        ):
             await asyncio.sleep(20)
 
     app = create_app(simulation_settings(), SlowFactory())

@@ -29,6 +29,7 @@ async def main():
             "fallback_email": SecretStr(""),
             "alert_from_email": SecretStr(""),
             "callmebot_api_key": SecretStr(""),
+            "callmebot_recipient_keys": SecretStr(""),
             "guardian_phone": SecretStr(""),
             "max_session_seconds": 90,
         }

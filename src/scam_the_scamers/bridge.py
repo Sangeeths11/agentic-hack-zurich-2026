@@ -13,6 +13,7 @@ from fastapi import WebSocket, WebSocketDisconnect
 from .agent import AgentFactory, AgentSession
 from .caller import CallerLookup, lookup_caller
 from .config import Settings, normalize_guardian_phone
+from .profiles import ProfileStore
 
 INPUT_RATE = 24000
 OUTPUT_RATE = 48000
@@ -108,6 +109,7 @@ async def relay(
     session_id: str,
     caller: CallerLookup,
     guardian_phone: str,
+    profile_store: ProfileStore | None = None,
 ) -> None:
     started = time.monotonic()
     session: AgentSession | None = None
@@ -135,6 +137,25 @@ async def relay(
                     continue
                 if control == {"event": "cancel_warning"} and session is not None:
                     await session.cancel_warning()
+                    continue
+                if (
+                    isinstance(control, dict)
+                    and set(control) == {"event", "revision"}
+                    and control["event"] == "settings"
+                    and type(control["revision"]) is int
+                    and profile_store is not None
+                ):
+                    preferences = profile_store.snapshot()
+                    # Only apply an accepted server snapshot; raw profile data and
+                    # recipients cannot be smuggled through the audio protocol.
+                    if control["revision"] != preferences.revision:
+                        if session is not None:
+                            await session.notify(
+                                {"event": "settings_stale", "revision": preferences.revision}
+                            )
+                        continue
+                    if session is not None:
+                        await session.update_preferences(preferences)
                     continue
                 raise ProtocolError("Unexpected control message")
             audio = message.get("bytes", b"")
@@ -195,9 +216,18 @@ async def relay(
             5,
         )
         session = await asyncio.wait_for(
-            factory.open(caller, session_id, guardian_phone=guardian_phone),
+            factory.open(
+                caller,
+                session_id,
+                guardian_phone=guardian_phone,
+                preferences=profile_store.snapshot() if profile_store is not None else None,
+                preferences_provider=profile_store.snapshot if profile_store is not None else None,
+            ),
             settings.session_start_timeout_seconds,
         )
+        assert session is not None
+        if profile_store is not None:
+            await session.update_preferences(profile_store.snapshot())
         await asyncio.wait_for(
             ws.send_json(
                 {
@@ -207,6 +237,9 @@ async def relay(
                     "caller": caller.public(),
                     "email_status": settings.email_status(),
                     "whatsapp_status": settings.whatsapp_status(guardian_phone),
+                    "settings_revision": profile_store.snapshot().revision
+                    if profile_store is not None
+                    else 0,
                 }
             ),
             5,
@@ -263,7 +296,12 @@ class SessionRegistry:
 
 
 async def handle_stream(
-    ws: WebSocket, settings: Settings, factory: AgentFactory, registry: SessionRegistry
+    ws: WebSocket,
+    settings: Settings,
+    factory: AgentFactory,
+    registry: SessionRegistry,
+    *,
+    profile_store: ProfileStore | None = None,
 ) -> None:
     if not registry.acquire(ws):
         await ws.close(code=1013)
@@ -274,7 +312,7 @@ async def handle_stream(
         await ws.accept()
         caller, guardian_phone = await read_start(ws, settings)
         log.info("screening_started id=%s active=%d", session_id, len(registry.sockets))
-        await relay(ws, settings, factory, session_id, caller, guardian_phone)
+        await relay(ws, settings, factory, session_id, caller, guardian_phone, profile_store)
     except WebSocketDisconnect:
         pass
     except (ProtocolError, ValueError, KeyError, TypeError, AttributeError):

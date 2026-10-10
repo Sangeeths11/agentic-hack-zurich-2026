@@ -1,11 +1,13 @@
 import { LevelTrigger, decodePcm } from "./audio.js";
 import { addActivity, showActivityPhase, showTool, resetTools } from "./activity.js";
+import { createPersonalSettings } from "./personal-settings.js";
 
-import { criteria, riskColor, validAssessment, assessmentColor, GuardianAlerts, PlaybackGuard } from "./screening.js";
+import { criteria, riskColor, validAssessment, assessmentColor, displayTranscriptTurns, GuardianAlerts, PlaybackGuard } from "./screening.js";
 
 const guard = new PlaybackGuard();
 let revision = 0, finishing = false, warningPlaybackAllowed = false;
 let latestAssessment = null, callerMatched = false, transcriptRevision = 0;
+let activeSettingsRevision = 0;
 let guardianAlerts = new GuardianAlerts(), whatsappStatus = "not_configured", defaultGuardianPhone = "";
 let lookupRequest = null, lookupSequence = 0;
 const TRANSCRIPT_LIMIT = 24000;
@@ -32,6 +34,12 @@ let playbackUntil = 0,
   cooldownUntil = 0;
 let configured = false,
   maxSessionSeconds = 300;
+const personalSettings = createPersonalSettings({ onSaved(revision) {
+  if (!socket || socket.readyState !== WebSocket.OPEN || phase === "connecting") return false;
+  socket.send(JSON.stringify({ event: "settings", revision }));
+  activeSettingsRevision = Math.max(activeSettingsRevision, revision);
+  return true;
+} });
 const states = {
   off: [
     "READY TO LISTEN",
@@ -124,6 +132,7 @@ function closeSession(
   if (old) {
     $("assessment-status").textContent = "Session ended. Last assessment is no longer live.";
     resetTools(true);
+    personalSettings.ended();
   }
   if (rearm && enabled) setPhase("armed");
 }
@@ -224,6 +233,7 @@ function startSession() {
   resetTranscript();
   resetTools();
   guardianAlerts = new GuardianAlerts();
+  activeSettingsRevision = 0;
   $("guardian-banner").hidden = true;
   resetScores("Waiting for speech and a valid assessment.");
   $("warning-text").hidden = true;
@@ -270,12 +280,15 @@ function startSession() {
       void fail("Invalid server response.");
       return;
     }
+    if (["assessment", "assessment_unavailable", "transcript"].includes(event.event) &&
+        (Number.isInteger(event.settings_revision) ? event.settings_revision : 0) < activeSettingsRevision) return;
     if (event.event === "ready") {
       if (event.input_rate !== 24000 || event.output_rate !== 48000) {
         void fail("The audio format is not compatible with the listener.");
         return;
       }
       clearTimeout(startupTimer);
+      if (Number.isInteger(event.settings_revision)) activeSettingsRevision = Math.max(activeSettingsRevision, event.settings_revision);
       showCaller(event.caller);
       $("tool-resend").textContent = event.email_status.replaceAll("_", " ");
       if (typeof event.whatsapp_status === "string") {
@@ -283,7 +296,12 @@ function startSession() {
         showWhatsAppConfig(event.whatsapp_status, true);
       }
       setPhase("listening");
+      personalSettings.sessionReady();
       pump();
+    } else if (event.event === "settings_applied") {
+      if (Number.isInteger(event.revision)) activeSettingsRevision = Math.max(activeSettingsRevision, event.revision);
+      if (latestAssessment && (latestAssessment.settings_revision ?? 0) < activeSettingsRevision) resetScores("Personal settings applied. Waiting for an assessment with the updated context.");
+      personalSettings.applied(event.revision);
     } else if (event.event === "assessment") {
       if (!validAssessment(event)) { void fail("Invalid assessment from server."); return; }
       if (event.revision <= revision) return;
@@ -487,6 +505,7 @@ $("sensitivity").addEventListener("input", (event) => {
   );
 });
 window.addEventListener("pagehide", () => {
+  personalSettings.dispose();
   void stop();
 });
 try {
@@ -598,13 +617,35 @@ function resetTranscript() {
 }
 
 function showTranscript(event) {
-  if (!Number.isInteger(event.revision) || event.revision <= transcriptRevision || typeof event.text !== "string") return;
+  if (!Number.isInteger(event.revision) || event.revision < transcriptRevision || (event.revision === transcriptRevision && !Array.isArray(event.turns)) || typeof event.text !== "string") return;
   transcriptRevision = event.revision;
   const clipped = event.text.length > TRANSCRIPT_LIMIT;
   const text = clipped ? `${event.text.slice(0, 6000)}\n[…]\n${event.text.slice(-(TRANSCRIPT_LIMIT - 6005))}` : event.text;
   const display = $("transcript-text");
   const nearBottom = display.scrollHeight - display.scrollTop - display.clientHeight < 40;
-  display.textContent = text;
+  const turns = displayTranscriptTurns(event.turns);
+  if (turns) {
+    display.replaceChildren();
+    for (const turn of turns) {
+      const row = document.createElement("div");
+      row.className = "transcript-turn";
+      row.id = `transcript-turn-${turn.id}`;
+      row.dataset.turnId = String(turn.id);
+      row.dataset.role = turn.role;
+      const speaker = document.createElement("strong");
+      speaker.textContent = { caller: "Caller (inferred)", listener: "You (inferred)", unknown: "Speaker unknown" }[turn.role];
+      const speech = document.createElement("p");
+      speech.textContent = turn.text;
+      if (Number.isFinite(turn.start_s)) {
+        const time = document.createElement("span");
+        time.className = "transcript-time";
+        time.textContent = `${Math.floor(turn.start_s / 60)}:${String(Math.floor(turn.start_s % 60)).padStart(2, "0")}`;
+        speaker.append(time);
+      }
+      row.append(speaker, speech);
+      display.append(row);
+    }
+  } else display.textContent = text;
   display.hidden = false;
   $("transcript-empty").hidden = true;
   $("transcript-state").textContent = `Live · ${event.revision}`;
@@ -618,8 +659,12 @@ function showGuardianAlert(event) {
   if (!guardianAlerts.accept(event)) return;
   const latest = guardianAlerts.latest();
   const time = new Intl.DateTimeFormat("en", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }).format(new Date(latest.accepted_at));
-  $("guardian-message").textContent = `Guardian alerted at ${time} — ${latest.severity}`;
-  const channels = [...guardianAlerts.accepted.values()].map((accepted) => `${accepted.channel === "whatsapp" ? "WhatsApp (CallMeBot)" : "Email (Resend)"}: ${accepted.severity}`);
+  $("guardian-message").textContent = `Guardian alert accepted at ${time} — ${latest.severity}`;
+  const channels = [...guardianAlerts.accepted.values()].map((accepted) => {
+    const contact = accepted.channel === "whatsapp" && typeof accepted.contact_phone === "string"
+      ? ` — ${[accepted.contact_name, accepted.contact_phone].filter(Boolean).join(" ")}` : "";
+    return `${accepted.channel === "whatsapp" ? "WhatsApp (CallMeBot)" : "Email (Resend)"}: ${accepted.severity}${contact}`;
+  });
   $("guardian-note").textContent = `Accepted by provider · ${channels.join(" · ")}. Delivery is unverified.`;
   $("guardian-banner").dataset.level = String(latest.level);
   $("guardian-banner").hidden = false;
@@ -635,7 +680,7 @@ function showWhatsAppConfig(status, session = false) {
   if (!phone) message = "WhatsApp disabled: no guardian number. Screening continues.";
   else if (!validFormat) message = "Invalid phone format. Use a phone number, for example +41 79 123 45 67. The server validates the number when screening starts.";
   else if (!session && changed) message = "Guardian number set for the next screening session. The server will validate this number and its configuration when screening starts.";
-  else if (status === "configured") message = "WhatsApp configured. Automatic alerts at levels 50, 75 and 90, or an independent scam flag.";
+  else if (status === "configured") message = "WhatsApp configured. Alerts follow Personal settings; independent scam flags can also qualify.";
   else if (status === "invalid_configuration") message = "WhatsApp configuration is invalid. Check the guardian number and server settings. Screening continues.";
   else message = "WhatsApp not configured. Add the matching CallMeBot API key on the server. Screening continues without WhatsApp.";
   if (!session && phone && (changed || !validFormat)) {

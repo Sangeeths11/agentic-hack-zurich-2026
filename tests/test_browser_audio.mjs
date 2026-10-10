@@ -61,7 +61,7 @@ test("PCM clipping and signed little-endian decoding", () => {
   assert.equal(decoded[1], -1);
 });
 
-const { PlaybackGuard, riskColor, validAssessment, assessmentColor, validGuardianAlert, GuardianAlerts, criteria } = await import("../src/scam_the_scamers/static/screening.js");
+const { PlaybackGuard, riskColor, validAssessment, assessmentColor, validGuardianAlert, GuardianAlerts, displayTranscriptTurns, criteria } = await import("../src/scam_the_scamers/static/screening.js");
 for (const [score, color] of [[49,"green"],[50,"amber"],[74,"amber"],[75,"red"],[89,"red"],[90,"critical"],[NaN,"unavailable"],[-1,"unavailable"]]) {
   test(`risk boundary ${score}: ${color}`, () => assert.equal(riskColor(score), color));
 }
@@ -114,4 +114,51 @@ test("guardian acceptance is tracked independently per channel without downgradi
   assert.equal(alerts.latest().severity, "Critical");
   assert.equal(alerts.latest().channel, "whatsapp");
   assert.equal(new GuardianAlerts().accepted.size, 0);
+});
+test("WhatsApp acceptance is independent for every emergency contact", () => {
+  const alerts = new GuardianAlerts();
+  const event = { channel: "whatsapp", status: "accepted", level: 75, severity: "High", accepted_at: "2026-10-10T12:30:00Z" };
+  assert.equal(alerts.accept({ ...event, contact_phone: "+41791234567", contact_name: "Emily" }), true);
+  assert.equal(alerts.accept({ ...event, contact_phone: "+41791234568", contact_name: "Tyler" }), true);
+  assert.equal(alerts.accepted.size, 2);
+  assert.equal(alerts.accept({ ...event, contact_phone: "+41791234567" }), false);
+  assert.equal(alerts.accept({ ...event, contact_phone: "+41791234568", status: "unknown" }), false);
+  assert.equal(alerts.accepted.size, 2);
+});
+test("transcript turns retain original speech and bounded, explicit inferred roles", () => {
+  const turns = [
+    { id: 1, role: "caller", text: '<img src=x onerror="alert(1)">', start_s: 1.2 },
+    { id: 2, role: "listener", text: "Is that really you?", start_s: -1 },
+    { id: 5, role: "unknown", text: "A mixed segment." },
+  ];
+  const display = displayTranscriptTurns(turns);
+  assert.deepEqual(display.map((turn) => turn.id), [1, 2, 5]);
+  assert.equal(display[0].text, turns[0].text);
+  assert.equal(display[0].role, "caller");
+  assert.equal(display[0].start_s, 1.2);
+  assert.equal(display[1].start_s, undefined);
+  assert.equal(display[2].role, "unknown");
+  assert.equal(displayTranscriptTurns([{ id: 1, text: "uncertain", role: "daughter" }]), null);
+  assert.equal(displayTranscriptTurns([{ id: 1, text: "x".repeat(24001), role: "caller" }]), null);
+  assert.equal(displayTranscriptTurns([{ text: "missing segment identity", role: "unknown" }]), null);
+  assert.equal(displayTranscriptTurns([{ ...turns[0], id: -1 }]), null);
+  assert.equal(displayTranscriptTurns([{ ...turns[0], id: "1" }]), null);
+  assert.equal(displayTranscriptTurns([turns[0], turns[0]]), null);
+  assert.equal(displayTranscriptTurns(Array.from({ length: 401 }, () => turns[0])), null);
+  assert.equal(displayTranscriptTurns(undefined), null);
+});
+const { validPersonalSettings } = await import("../src/scam_the_scamers/static/personal-settings.js");
+test("personal settings require bounded preferences and a complete profile contract", () => {
+  const settings = { text: "My name is Margaret", profile: { listener_name: "Margaret", personal_context: "", emergency_contacts: [] }, warning_threshold: 50, whatsapp_threshold: 50, whatsapp_cooldown_seconds: 60, revision: 0, status: "ready" };
+  assert.equal(validPersonalSettings(settings), true);
+  for (const field of ["warning_threshold", "whatsapp_threshold"]) {
+    assert.equal(validPersonalSettings({ ...settings, [field]: 0 }), false);
+    assert.equal(validPersonalSettings({ ...settings, [field]: 101 }), false);
+  }
+  assert.equal(validPersonalSettings({ ...settings, whatsapp_cooldown_seconds: 301 }), false);
+  assert.equal(validPersonalSettings({ ...settings, whatsapp_cooldown_seconds: 0 }), true);
+  assert.equal(validPersonalSettings({ ...settings, text: "x".repeat(6001) }), false);
+  assert.equal(validPersonalSettings({ ...settings, revision: -1 }), false);
+  assert.equal(validPersonalSettings({ ...settings, profile: { emergency_contacts: [] } }), false);
+  assert.equal(validPersonalSettings({ ...settings, profile: { ...settings.profile, emergency_contacts: [{ phone: "+41791234567" }] } }), false);
 });

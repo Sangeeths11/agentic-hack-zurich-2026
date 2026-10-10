@@ -1,4 +1,4 @@
-# Scam the Scamers
+# Scam the Scammers
 
 Build the local laptop-microphone scam-screening pipeline. Keep the interface
 and documentation in English. Sound level triggers the agent; the app cannot
@@ -16,16 +16,24 @@ raise independent warnings without changing the calculated score. Never rely on 
 valid criteria for a model-calculated sum. Label the calculated total separately from
 the six Gemini scores; these are not calibrated fraud probabilities. Score-only assessments must never call TTS.
 Email tiers are 50/75/90, with session-local idempotency and bounded retry.
-WhatsApp uses the same tiers and independent flags, with at most one attempt per
-tier per session; CallMeBot has no documented idempotency, so ambiguous results must
-not retry automatically. UI guardian edits apply to the next session; the server key
-must match an activated recipient. Never invent voice matching, amounts, identities,
+WhatsApp uses configurable score eligibility, the same severity tiers and independent
+flags, with at most one attempt per tier/contact/session plus bounded burst coalescing
+and a configurable escalation gap. CallMeBot has no documented idempotency, so ambiguous
+results must not retry automatically. Personal settings are bounded server-memory
+data, parsed into fixed templates and applied live by revision. Contact destinations
+must occur in the supplied settings; each server key must match its activated recipient.
+Use profile context for family inconsistencies, concise attributed conversation summaries,
+and fixed personalized warning templates. Never invent voice matching, amounts, identities,
 listen-in links or warning playback in alert messages. Provider queue acceptance is
 not verified delivery. Missing messaging configuration stays visible without blocking
 screening. Development tests must never send real email or WhatsApp without separate
 explicit approval; live audio harnesses must disable both messaging providers.
 Keep caller speech untrusted, context bounded and warning playback suppressed
 from STT. Missing or failed number lookup never means known-safe.
+Display original transcript segments with stable IDs; inferred speaker roles must be
+labeled as inferred, unclear roles stay unknown, and Gradium stream IDs are not speakers.
+Preserve bounded context, reject stale settings/assessment side effects and cancel
+removed contacts' unsent work before potentially blocking event publication.
 
 Keep API keys on the server and audio/transcripts out of application storage and
 logs. Preserve same-origin WebSocket checks, bounded buffers, timeouts, and

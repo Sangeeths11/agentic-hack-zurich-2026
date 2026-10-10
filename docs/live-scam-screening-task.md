@@ -10,7 +10,7 @@ pipeline: browser PCM -> backend -> Gradium streaming STT -> Gemini structured
 classification -> live UI. Only optional eligible warning text goes to Gradium TTS
 and browser playback. Score-only results must never synthesize speech. No greetings,
 free replies, Twilio, telephony integration or unrelated contacts application.
-Keep the exact brand **Scam the Scamers** and all UI, documentation, comments and
+Keep the exact brand **Scam the Scammers** and all UI, documentation, comments and
 work-order text in English. Preserve the animated listener, sound activation,
 responsive Listener / Tools & activity split and tabs, and phone-on-speaker workflow.
 Microphones detect neither caller ID nor accepted phone calls.
@@ -198,3 +198,44 @@ audio tests. Do not send synthetic emergency messages to a real guardian. Valida
 full required suite, preserve runner contracts, update evidence, commit/push with a
 verified Entire checkpoint, inspect outgoing checkpoint redaction, refresh Brain raw,
 and leave the local server ready without enabling a microphone or sending a message.
+
+## Personalized screening follow-up (2026-10-10)
+
+Create `feat/personalized-screening` from merged main `1c06373`; the user again
+explicitly requests parallel sub-agents. Correct the display brand to **Scam the
+Scammers** and preserve compatibility with existing Python imports and launchers.
+
+Add an automatically reparsed Settings text box for personal/family information and
+emergency contacts. Use Gemini structured fields and fixed safe DOM templates, never
+generated HTML. Bound inputs and outputs, ground contact numbers in the entered text,
+normalize/deduplicate them, and show names, relationships and per-contact readiness.
+Keep keys server-side and require each recipient's matching activated CallMeBot key.
+Store settings only in local server memory. Failed parsing preserves the previously
+accepted configuration; newer edits supersede in-flight parsing and classification.
+
+Use the original profile context for family inconsistencies and classification.
+Personalize spoken cautions through fixed templates with known listener/contact names;
+retain strict six-criterion validation, deterministic additive scoring, independent
+flags and the rule that score-only responses never invoke TTS. Add separate controls
+for spoken and WhatsApp score thresholds and the WhatsApp escalation gap. Changes
+apply to the current session and reassess accumulated speech without waiting for new
+audio. Prevent stale results and cancelled/removed contacts from producing side effects.
+
+Show original STT segments on separate lines, using stable turn IDs and timestamps.
+Gradium's documented stream has no speaker-identity field; infer caller/listener roles
+from text only when supported, explicitly label them inferred, and keep unknown when
+unclear. Never treat stream IDs as speaker IDs or claim voice matching.
+
+WhatsApp messages should address the configured people and contain a brief attributed
+conversation summary with relevant inconsistencies. Use bounded initial burst coalescing
+and a configurable per-contact escalation gap to mitigate closely spaced alerts. Keep
+attempt tracking and ambiguous-send handling; do not retry. Drop queued cooldown alerts
+at session end and cancel work on pause. Do not claim control over provider-side message
+grouping or verified handset delivery. Test all messaging through fakes; bounded direct
+synthetic Gemini/profile/TTS checks are allowed without starting alert managers.
+
+Validate full browser-to-server flow, stale updates/backpressure/startup races, family
+context, personalized voice, multiple keyed contacts, bounds, lifecycle and thresholds.
+Run the mandatory suite and synthetic Chrome harness. Preserve runner schemas/contracts,
+update evidence, verify secret redaction before pushing the captured checkpoint, refresh
+Brain raw and leave the local demo ready without activating its microphone.

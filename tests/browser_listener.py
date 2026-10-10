@@ -12,10 +12,44 @@ from pathlib import Path
 import uvicorn
 from playwright.async_api import async_playwright
 from pydantic import SecretStr
-from support import DemoFactory, FakeWhatsApp, assessment, simulation_settings
+from support import DemoFactory, FakeEmail, FakeWhatsApp, assessment, simulation_settings
 
 from scam_the_scamers.main import create_app
+from scam_the_scamers.profiles import EmergencyContact, PersonalProfile
 from scam_the_scamers.providers import ProviderError, TranscriptEvent
+from scam_the_scamers.risk import SpeakerAssignment
+
+PERSONAL_TEXT = (
+    "My name is Margaret. Emily is my daughter and emergency contact +41791234567. "
+    "Noah is my son and emergency contact +41791234568. Tyler is my grandson in Bern. "
+    '<img src=x onerror="alert(1)">'
+)
+PERSONAL_PROFILE = PersonalProfile(
+    listener_name="Margaret",
+    emergency_contacts=(
+        EmergencyContact(name="Emily", relationship="daughter", phone="+41791234567"),
+        EmergencyContact(name="Noah", relationship="son", phone="+41791234568"),
+    ),
+)
+
+
+class BrowserProfileParser:
+    """Only synthetic, deterministic settings extraction; never calls Gemini."""
+
+    def __init__(self):
+        self.calls = []
+        self.slow_started = asyncio.Event()
+
+    async def parse(self, text):
+        self.calls.append(text)
+        if text == "My name is Old. Slow profile.":
+            self.slow_started.set()
+            await asyncio.sleep(1.5)
+            return PersonalProfile(listener_name="Old")
+        if text == "Unparseable profile":
+            raise ProviderError("gemini", "synthetic_failure")
+        return PERSONAL_PROFILE
+
 
 SYNTHETIC_MICROPHONE = """
 (() => {
@@ -64,8 +98,10 @@ async def wait_browser(page, expression, deadline_ms=5000):
 async def main():
     settings = simulation_settings(max_session_seconds=60, callmebot_api_key="", guardian_phone="")
     factory = DemoFactory(settings, assessment(49))
+    assert isinstance(factory.email, FakeEmail), "Browser tests must never send email"
     assert isinstance(factory.whatsapp, FakeWhatsApp), "Browser tests must never send WhatsApp"
-    app = create_app(settings, factory)
+    profile_parser = BrowserProfileParser()
+    app = create_app(settings, factory, profile_parser=profile_parser)
     sock = socket.socket()
     sock.bind(("127.0.0.1", 0))
     port = sock.getsockname()[1]
@@ -269,6 +305,9 @@ async def main():
                 settings.fallback_email = SecretStr("guardian@example.org")
                 settings.callmebot_api_key = SecretStr("offline")
                 settings.guardian_phone = SecretStr("+41791234567")
+                settings.callmebot_recipient_keys = SecretStr(
+                    json.dumps({"+41791234568": "offline"})
+                )
                 factory.whatsapp.delay = 0.8
                 await page.reload()
                 await wait_browser(page, "!document.querySelector('#toggle').disabled")
@@ -309,7 +348,9 @@ async def main():
                 await wait_browser(page, "!document.querySelector('#guardian-banner').hidden")
                 assert await page.locator("#risk-panel").get_attribute("data-risk") == "red"
                 banner = await page.locator("#guardian-message").inner_text()
-                assert banner.startswith("Guardian alerted at ") and banner.endswith(" — High")
+                assert banner.startswith("Guardian alert accepted at ") and banner.endswith(
+                    " — High"
+                )
                 assert len(factory.email.calls) == 1
                 assert len(factory.whatsapp.calls) == 1
                 assert factory.whatsapp.calls[0][0] == "+41791234568"
@@ -429,6 +470,218 @@ async def main():
                 print(
                     "Browser: guardian phone, no sends on edits, per-channel acceptance, "
                     "WhatsApp sending/accepted/error/unknown/stopped and no false banner passed",
+                    flush=True,
+                )
+
+                # Profile parsing uses the injected fake, including stale and error responses.
+                await page.set_viewport_size({"width": 1280, "height": 1080})
+                await page.locator("#caller-number").fill("")
+                before_alerts = len(factory.whatsapp.calls)
+                await page.locator("#personal-details").fill("My name is Old. Slow profile.")
+                await wait_browser(
+                    page,
+                    "document.querySelector('#profile-save-status').dataset.status === 'parsing'",
+                )
+                await asyncio.wait_for(profile_parser.slow_started.wait(), 3)
+                await page.locator("#personal-details").fill(PERSONAL_TEXT)
+                await wait_browser(
+                    page,
+                    "document.querySelector('#profile-save-status').dataset.status === 'ready'",
+                )
+                assert (
+                    await page.locator("#profile-listener-name").inner_text()
+                    == "Listening for Margaret"
+                )
+                assert await page.locator("#emergency-contacts .emergency-contact").count() == 2
+                assert (
+                    "Emergency contact 1: +41791234567"
+                    in await page.locator("#emergency-contacts").inner_text()
+                )
+                assert "Emily · daughter" in await page.locator("#emergency-contacts").inner_text()
+                assert "Noah · son" in await page.locator("#emergency-contacts").inner_text()
+                await page.locator("#profile-context-details summary").click()
+                assert await page.locator("#profile-context img").count() == 0
+                assert "<img src=x" in await page.locator("#profile-context").inner_text()
+                await page.locator("#profile-context-details summary").click()
+                assert not await page.locator("#guardian-fallback").is_visible()
+                assert (
+                    "2 emergency contacts"
+                    in await page.locator("#guardian-override-status").inner_text()
+                )
+                await page.wait_for_timeout(1600)
+                assert "Margaret" in await page.locator("#profile-listener-name").inner_text()
+                assert len(factory.whatsapp.calls) == before_alerts
+
+                await page.locator("#personal-details").fill("Unparseable profile")
+                await wait_browser(
+                    page,
+                    "document.querySelector('#profile-save-status').dataset.status === 'error'",
+                )
+                assert (
+                    "last accepted settings remain active"
+                    in await page.locator("#profile-save-status").inner_text()
+                )
+                assert await page.locator("#emergency-contacts .emergency-contact").count() == 2
+                assert await page.locator("#profile-retry").is_visible()
+                await page.locator("#personal-details").fill(PERSONAL_TEXT)
+                await wait_browser(
+                    page,
+                    "document.querySelector('#profile-save-status').dataset.status === 'ready'",
+                )
+                factory.classifier.result = assessment(20).model_copy(
+                    update={"speaker_assignments": [SpeakerAssignment(turn_id=1, role="caller")]}
+                )
+                await page.get_by_role("button", name="Enable listener").click()
+                await wait_browser(page, "document.querySelector('#orb').dataset.state === 'armed'")
+                await page.evaluate("testAudio.gain.gain.value = 0.12")
+                await wait_browser(
+                    page,
+                    "document.querySelector('#transcript-text').textContent"
+                    ".includes('Caller (inferred)')",
+                )
+                assert await page.locator("#transcript-turn-1").get_attribute("data-turn-id") == "1"
+                await page.evaluate("testAudio.gain.gain.value = 0")
+                assert await page.locator("#personal-details").is_enabled()
+                for control, value in (
+                    ("warning-threshold", "95"),
+                    ("whatsapp-threshold", "95"),
+                    ("whatsapp-cooldown-seconds", "120"),
+                ):
+                    await page.locator(f"#{control}").evaluate(
+                        "(input, value) => { input.value = value; "
+                        "input.dispatchEvent(new Event('input', { bubbles: true })); }",
+                        value,
+                    )
+                await wait_browser(
+                    page,
+                    "document.querySelector('#profile-save-status').textContent"
+                    ".includes('applied to this live')",
+                )
+                assert len(factory.whatsapp.calls) == before_alerts
+                assert await page.locator("#warning-threshold-value").inner_text() == "95 / 100"
+                assert await page.locator("#whatsapp-cooldown-seconds-value").inner_text() == "120s"
+                await wait_browser(
+                    page, "document.querySelector('#overall-score').textContent === '20 / 100'"
+                )
+                # Delayed events from the previous profile cannot overwrite the live result.
+                await factory.sessions[-1].notify(
+                    {
+                        "event": "assessment",
+                        **assessment(100, is_scam=True).model_dump(),
+                        "revision": 999,
+                        "settings_revision": 0,
+                        "context_truncated": False,
+                    }
+                )
+                await factory.sessions[-1].notify(
+                    {
+                        "event": "transcript",
+                        "revision": 999,
+                        "settings_revision": 0,
+                        "text": "Stale profile speech",
+                        "turns": [{"id": 999, "text": "Stale profile speech", "role": "caller"}],
+                    }
+                )
+                await factory.sessions[-1].notify(
+                    {"event": "assessment_unavailable", "revision": 999, "settings_revision": 0}
+                )
+                await page.wait_for_timeout(150)
+                assert await page.locator("#overall-score").inner_text() == "20 / 100"
+                assert (
+                    "Stale profile speech"
+                    not in await page.locator("#transcript-text").inner_text()
+                )
+                speech_before = len(factory.speech.calls)
+                factory.classifier.result = assessment(90, warning=True).model_copy(
+                    update={
+                        "speaker_assignments": [
+                            SpeakerAssignment(turn_id=1, role="caller"),
+                            SpeakerAssignment(turn_id=2, role="listener"),
+                        ]
+                    }
+                )
+                await factory.stts[-1].events.put(TranscriptEvent("text", "Is that really you?"))
+                await factory.stts[-1].events.put(TranscriptEvent("boundary"))
+                await wait_browser(
+                    page, "document.querySelector('#overall-score').textContent === '90 / 100'"
+                )
+                await wait_browser(
+                    page,
+                    "document.querySelector('#transcript-text').textContent"
+                    ".includes('You (inferred)')",
+                )
+                await page.wait_for_timeout(300)
+                assert len(factory.speech.calls) == speech_before
+                assert len(factory.whatsapp.calls) == before_alerts
+                assert not await page.locator("#guardian-banner").is_visible()
+
+                # Independent scam evidence remains eligible even at a high personal threshold.
+                factory.classifier.result = assessment(10, warning=True, is_scam=True).model_copy(
+                    update={
+                        "speaker_assignments": [
+                            SpeakerAssignment(turn_id=1, role="caller"),
+                            SpeakerAssignment(turn_id=2, role="listener"),
+                        ]
+                    }
+                )
+                await factory.stts[-1].events.put(
+                    TranscriptEvent("text", "A mixed speaker segment.")
+                )
+                await wait_browser(
+                    page, "document.querySelector('#guardian-note').textContent.includes('Noah')"
+                )
+                assert "Emily" in await page.locator("#guardian-note").inner_text()
+                assert "+41791234567" in await page.locator("#guardian-note").inner_text()
+                assert "+41791234568" in await page.locator("#guardian-note").inner_text()
+                assert len(factory.whatsapp.calls) == before_alerts + 2
+                assert "Speaker unknown" in await page.locator("#transcript-text").inner_text()
+                assert await page.locator("#transcript-text .transcript-turn").count() == 3
+                assert (
+                    await page.locator("#transcript-turn-1").get_attribute("data-role") == "caller"
+                )
+                assert (
+                    await page.locator("#transcript-turn-2").get_attribute("data-role")
+                    == "listener"
+                )
+                assert (
+                    await page.locator("#transcript-turn-3").get_attribute("data-role") == "unknown"
+                )
+                await page.get_by_role("button", name="Split view", exact=True).click()
+                await page.screenshot(
+                    path=str(artifacts / "listener-personalized.png"), full_page=True
+                )
+                await page.get_by_role("button", name="Pause listener").click()
+                await page.reload()
+                await wait_browser(
+                    page, "document.querySelector('#personal-details').value.includes('Margaret')"
+                )
+                assert await page.locator("#personal-details").input_value() == PERSONAL_TEXT
+                assert await page.locator("#warning-threshold").input_value() == "95"
+                assert await page.evaluate(
+                    "localStorage.length === 0 && sessionStorage.length === 0"
+                )
+                await page.set_viewport_size({"width": 390, "height": 844})
+                await page.get_by_role("button", name="Listener", exact=True).click()
+                assert await page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+                await page.locator(".personal-settings").screenshot(
+                    path=str(artifacts / "listener-personalized-mobile.png"), animations="disabled"
+                )
+                await page.locator("#personal-details").fill("")
+                await wait_browser(
+                    page,
+                    "document.querySelector('#profile-save-status').dataset.status === 'ready'",
+                )
+                assert await page.locator("#emergency-contacts .emergency-contact").count() == 0
+                assert (
+                    "WhatsApp alerts are disabled"
+                    in await page.locator("#guardian-override-status").inner_text()
+                )
+                assert not await page.locator("#guardian-fallback").is_visible()
+                assert len(factory.whatsapp.calls) == before_alerts + 2
+                print(
+                    "Browser: automatic profile extraction/stale/error handling, emergency cards, "
+                    "live settings/thresholds, two recipients, inferred turns, "
+                    "memory-only reload passed",
                     flush=True,
                 )
 

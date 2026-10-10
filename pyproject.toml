@@ -1,7 +1,7 @@
 [project]
-name = "scam-the-scamers"
-version = "0.3.0"
-description = "Live microphone scam screening with Gradium, Gemini and Resend"
+name = "scam-the-scammers"
+version = "0.4.0"
+description = "Personalized scam screening with Gradium, Gemini and guardian alerts"
 requires-python = ">=3.12,<3.13"
 dependencies = [
     "fastapi>=0.115,<1",
@@ -23,6 +23,8 @@ dev = [
 ]
 
 [project.scripts]
+scam-the-scammers = "scam_the_scamers.cli:main"
+# Compatibility with existing local launchers.
 scam-the-scamers = "scam_the_scamers.cli:main"
 
 [build-system]

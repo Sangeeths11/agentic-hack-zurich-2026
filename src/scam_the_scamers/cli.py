@@ -102,7 +102,7 @@ async def check_providers(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Scam the Scamers local microphone listener")
+    parser = argparse.ArgumentParser(description="Scam the Scammers local microphone listener")
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("serve", help="Open the listener at http://localhost:8082")
     check = commands.add_parser("doctor", help="Validate configuration without revealing secrets")

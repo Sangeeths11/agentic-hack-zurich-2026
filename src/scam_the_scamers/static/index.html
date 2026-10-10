@@ -4,14 +4,14 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#f5f5ef" />
-    <title>Scam the Scamers · Listener</title>
+    <title>Scam the Scammers · Listener</title>
     <link rel="stylesheet" href="/assets/listener.css" />
     <script type="module" src="/assets/listener.js"></script>
   </head>
   <body>
     <header>
-      <a class="brand" href="/" aria-label="Scam the Scamers home"
-        ><span class="brand-icon">◉</span> Scam the Scamers<span
+      <a class="brand" href="/" aria-label="Scam the Scammers home"
+        ><span class="brand-icon">◉</span> Scam the Scammers<span
           class="brand-tag"
           >LISTENER</span
         ></a
@@ -90,12 +90,13 @@
                 placeholder="+41 79 123 45 67" aria-describedby="caller-help" /><button id="check-number" type="button">Check number</button></div>
               <p id="caller-help">Enter an international number, or a Swiss local number. The microphone cannot detect caller ID.</p>
               <p id="caller-check-status" class="caller-check-status" role="status" hidden></p>
-              <div class="guardian-settings">
-                <label for="guardian-phone">Guardian WhatsApp number <span>(optional)</span></label>
+              <div id="guardian-fallback" class="guardian-settings">
+                <label for="guardian-phone">Fallback guardian WhatsApp number <span>(optional)</span></label>
                 <input id="guardian-phone" type="tel" maxlength="64" autocomplete="off" placeholder="+41 79 123 45 67" aria-describedby="guardian-help whatsapp-status" />
                 <p id="guardian-help">Use an international number (+ or 00), or a Swiss local number. The guardian must activate CallMeBot for this number; its matching API key stays on the server. Edits apply when screening next starts. Clear the number to disable WhatsApp. Editing sends no message.</p>
                 <p id="whatsapp-status" role="status">Checking WhatsApp configuration…</p>
               </div>
+              <p id="guardian-override-status" class="guardian-override" role="status" hidden></p>
               <p id="fallback-status" role="status">Checking fallback email configuration…</p>
               <p class="provider-note">During screening, Gradium transcribes audio and Gemini assesses the text. Configured guardian alerts send a risk summary via CallMeBot (WhatsApp) and Resend (email).</p>
             </div>
@@ -123,6 +124,30 @@
               </div>
               <span id="level-value">— dB</span>
             </div>
+          </section>
+          <section class="personal-settings" aria-labelledby="personal-settings-title">
+            <div class="section-heading"><h2 id="personal-settings-title">Personal settings</h2><span class="count-badge">LIVE EDITABLE</span></div>
+            <p class="settings-intro">Help the listener understand your family and alert the right people. Changes are parsed automatically, including while you listen.</p>
+            <label for="personal-details">Settings — about you, your family and emergency contacts</label>
+            <textarea id="personal-details" rows="5" maxlength="6000" autocomplete="off" spellcheck="false" aria-describedby="personal-details-help profile-save-status" placeholder="My name is Margaret. Emily is my daughter. In an emergency, contact Emily on +41 79 123 45 67. Tyler is my grandson; he lives in Bern."></textarea>
+            <div class="settings-text-meta"><p id="personal-details-help">Include each emergency contact's name, relationship and phone number. Review the extracted details below.</p><span id="personal-details-count">0 / 6000</span></div>
+            <p id="profile-save-status" class="profile-save-status" role="status">Loading personal settings…</p>
+            <button id="profile-retry" class="text-button" type="button" hidden>Retry saving settings</button>
+            <div class="profile-preview" aria-label="Parsed personal settings">
+              <h3 id="profile-listener-name">Your name is not set yet</h3>
+              <details id="profile-context-details" class="profile-context-details" hidden><summary>Context used by screening</summary><p id="profile-context" hidden></p></details>
+              <div id="emergency-contacts" aria-label="Emergency contacts"></div>
+              <p id="contacts-empty">No emergency contacts extracted yet. Add names and phone numbers above.</p>
+              <p class="rubric-note">Each WhatsApp recipient must activate CallMeBot and have a matching API key configured on the server. A name alone cannot receive an alert.</p>
+            </div>
+            <div class="alert-preferences">
+              <h3>Alert sensitivity</h3>
+              <div class="preference-control"><label for="warning-threshold">Spoken warning threshold</label><output id="warning-threshold-value" for="warning-threshold">50 / 100</output><input id="warning-threshold" type="range" min="1" max="100" step="1" value="50" /></div>
+              <div class="preference-control"><label for="whatsapp-threshold">WhatsApp alert threshold</label><output id="whatsapp-threshold-value" for="whatsapp-threshold">50 / 100</output><input id="whatsapp-threshold" type="range" min="1" max="100" step="1" value="50" /></div>
+              <div class="preference-control"><label for="whatsapp-cooldown-seconds">WhatsApp cooldown between alerts</label><output id="whatsapp-cooldown-seconds-value" for="whatsapp-cooldown-seconds">60s</output><input id="whatsapp-cooldown-seconds" type="range" min="0" max="300" step="1" value="60" /></div>
+              <p class="rubric-note">Higher thresholds reduce score-triggered alerts. Independent scam flags can still qualify. Spoken warnings also require eligible caution text. Saving settings while idle sends no alert. Changes during screening reassess the call.</p>
+            </div>
+            <p class="settings-privacy">Kept only in server memory until restart; never saved to browser storage. Gemini processes this text to extract your settings and assess the call in context.</p>
           </section>
           <section class="settings" aria-label="Listener settings">
             <div>
@@ -170,7 +195,7 @@
               <div id="criteria-scores"></div>
               <p class="rubric-note">Evidence indicators, not a probability or proof of fraud. A scam judgment or listed number can flag the call independently of the total.</p>
               <details><summary>How scores work</summary>
-                <p>Gemini assesses six criteria against the accumulated conversation. Each score: 0 absent, 25 ambiguous, 50 plausible, 75 strong, 100 explicit evidence. The server adds all six scores, caps the total at 100 and rounds to one decimal. Alerts start at 50 (caution), 75 (high) and 90 (critical). Gemini's scam judgment and a suspicious-number match can raise the alert level independently. Mistakes are possible. Verify independently.</p>
+                <p>Gemini assesses six criteria against the accumulated conversation. Each score: 0 absent, 25 ambiguous, 50 plausible, 75 strong, 100 explicit evidence. The server adds all six scores, caps the total at 100 and rounds to one decimal. Risk colors use 50 (caution), 75 (high) and 90 (critical). Personal settings control spoken-warning and WhatsApp thresholds. Gemini's scam judgment and a suspicious-number match can raise the alert level independently. Mistakes are possible. Verify independently.</p>
               </details>
             </section>
             <section class="tools-section" aria-labelledby="graph-title">
@@ -209,6 +234,7 @@
               <p id="transcript-empty" class="transcript-empty">Speech will appear here when Gradium transcribes it.</p>
               <div id="transcript-text" class="transcript-text" tabindex="0" aria-label="Current conversation transcript" hidden></div>
               <p id="transcript-note" class="rubric-note">Kept in memory for this session. Cleared when screening ends.</p>
+              <p class="rubric-note">Caller / You labels are inferred from conversation text, not voice identity. Speaker attribution can be wrong.</p>
             </section>
             <div class="activity-section">
               <div class="section-heading">
@@ -267,7 +293,7 @@
     </main>
     <footer>
       <span
-        >SCAM THE SCAMERS <span class="footer-dot">/</span> LOCAL LISTENER</span
+        >SCAM THE SCAMMERS <span class="footer-dot">/</span> LOCAL LISTENER</span
       ><span>Triggered by sound · phone call status is not detected.</span>
     </footer>
   </body>

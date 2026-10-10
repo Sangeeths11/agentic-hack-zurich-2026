@@ -427,8 +427,8 @@ wheels = [
 ]
 
 [[package]]
-name = "scam-the-scamers"
-version = "0.3.0"
+name = "scam-the-scammers"
+version = "0.4.0"
 source = { editable = "." }
 dependencies = [
     { name = "anyio" },

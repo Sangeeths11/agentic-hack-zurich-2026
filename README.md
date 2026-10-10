@@ -1,10 +1,14 @@
-# Scam the Scamers
+# Scam the Scammers
 
 A local call-screening companion. Answer a call on your phone, turn on
 speakerphone, and place your laptop nearby. The browser microphone sends audio
 through the backend to Gradium STT. Gemini scores six warning signs; scores
 update quietly. Only eligible caution text is sent to Gradium TTS and played aloud.
 There are no greetings or open-ended agent replies.
+
+The display name and command are **Scam the Scammers** / `scam-the-scammers`.
+The old command remains an alias for existing launchers; the internal Python module
+keeps its existing import path.
 
 ## Verified integration status
 
@@ -21,7 +25,7 @@ Entire session capture, commit checkpoint synchronization, Graph and Brain have 
 verified. Six runner definitions are prepared, but hosted Trails/Runners remain
 unavailable following the observed API 404; no hosted evaluation is claimed. See the
 [executed evidence](docs/live-scam-screening-evidence.md). Real phone-on-speaker
-acoustic testing, calibrated fraud accuracy and email delivery remain unverified.
+acoustic testing, calibrated fraud accuracy and guardian-message delivery remain unverified.
 
 ## Getting started
 
@@ -46,8 +50,12 @@ Switching views does not interrupt audio. Scores start as waiting, never invente
 A live pipeline graph highlights actual microphone, backend, SQLite, Gradium STT,
 Gemini, local scoring, Gradium TTS, playback, CallMeBot and Resend activity. Streaming connections
 and individual requests have distinct states. The most recent 60 events stay only in
-page memory. The live transcript shows the same bounded accumulated context sent to
-Gemini; it is never written to browser storage or application logs.
+page memory. The live transcript shows bounded accumulated context on separate lines.
+Gradium timestamps delimit segments; Gemini can infer Caller or You from the words
+and context. Labels explicitly say **inferred**, and unclear speech remains **Speaker
+unknown**. This is not acoustic diarization, voice matching or verified identity.
+Original transcribed text is preserved; the model supplies only roles for existing
+turn IDs. Transcripts are never written to browser storage or application logs.
 
 **End screening** flushes the last audio/text and returns to waiting. After 30 seconds
 of quiet the browser also finalizes the session. **Pause listener** immediately
@@ -55,6 +63,41 @@ cancels work, stops playback and releases the microphone. The server enforces a
 capture time limit, provider/media timeouts and a concurrency limit. Finalization
 has at most the request timeout plus 15 seconds of grace; pause/disconnect still
 cancels immediately during that grace period.
+
+## Personal settings and emergency contacts
+
+Use the **Settings** text box for your name, family details and emergency contacts:
+
+> My name is Margaret. My daughter Emily lives in Bern. I have no sons.
+> Emergency contact: +1 202 555 0123 (Emily, daughter).
+
+The example is fictional. After a short typing pause, Gemini extracts fixed fields;
+the UI shows numbered contact cards, relationships, phone numbers and WhatsApp readiness.
+It never renders model-generated HTML. A contact destination must be present in your
+text and normalize to a valid phone number. Review the cards for extraction mistakes.
+Every eligible configured contact receives the alert; duplicate phone numbers are removed.
+
+Accepted edits apply to the current call and trigger a fresh classification of the
+existing conversation. Revision checks prevent late results from replacing newer
+settings or alerting removed contacts. An already-sent request cannot be recalled.
+If extraction fails, the previous accepted configuration stays active and the UI
+explains the error. Clearing Settings removes its contacts. Personal settings stay
+only in this local server's memory until it restarts, and are shared by tabs connected
+to this server; they are not saved in browser storage.
+
+Gemini receives the original personal context and parsed contacts alongside the bounded
+conversation. Family inconsistencies can inform the family-claim criterion or independent
+scam flag. Settings and speech remain untrusted data, not instructions to the model.
+An inconsistency is a warning sign, not proof of fraud. Personalized voice cautions use
+short fixed templates with the listener and a trusted contact's name; arbitrary model
+prose, contact numbers and caller instructions are never spoken as a warning.
+
+Controls let you set **spoken-warning** and **WhatsApp score thresholds** separately
+(1–100), plus the minimum **WhatsApp escalation gap** (0–300 seconds, default 60).
+Higher thresholds reduce score-triggered alerts. Independent Gemini scam judgments
+and listed-number flags still qualify; the calculated score and 50/75/90 severity
+colors do not change. Email keeps its existing 50/75/90 tiers. Sound activation has
+its separate microphone sensitivity control.
 
 ## Scores and warnings
 
@@ -88,8 +131,9 @@ it states the reason for the flag separately from the additive total. A listed n
 may be stale or spoofed, and neither a low score nor a missing match establishes safety.
 
 Default `WARNING_THRESHOLD=50` gates spoken cautions based on scores; `is_scam=true`
-bypasses that threshold. **Score-only assessments never synthesize speech**: warning
-text must still be one of three allowlisted caution phrases in `risk.py`. Gemini is
+bypasses that threshold. **Score-only assessments never synthesize speech**:
+an allowlisted caution intent must still be present. The backend personalizes that
+intent using a fixed template when profile names are available. Gemini is
 instructed to supply one when it judges the conversation a scam, even at low scores.
 A number-only warning is visual and can alert a configured guardian during screening;
 checking a number before screening does not send guardian messages or synthesize speech. Each
@@ -121,12 +165,13 @@ the previous lookup. Use `+` or `00` for international numbers.
 
 ## Guardian WhatsApp via CallMeBot
 
-Set `CALLMEBOT_API_KEY` privately in `.env` and optionally set `GUARDIAN_PHONE` as
-the default, then restart the server. The key stays on the server. The web UI lets
-you edit the guardian number before listening; edits apply to the next screening
-session, send nothing by themselves and are not saved in browser storage. Clearing
-the field disables WhatsApp for that session. Use an international `+` or `00`
-prefix, or a national number in `CALLER_DEFAULT_REGION` (Switzerland by default).
+Set `CALLMEBOT_API_KEY` privately in `.env` and `GUARDIAN_PHONE` as its matching
+default recipient, then restart the server. That contact prefills Settings. For
+additional contacts, set `CALLMEBOT_RECIPIENT_KEYS` to a private JSON object mapping
+each international number to its own activated key. Keys stay on the server; the
+original key is never reused for an unrelated recipient. The legacy guardian field
+is available only before personal settings take over. Use an international `+` or
+`00` prefix, or a national number in `CALLER_DEFAULT_REGION` (Switzerland by default).
 
 The guardian must activate CallMeBot and the server key must match that number;
 changing the field alone cannot authorize a different recipient. Follow the
@@ -134,19 +179,31 @@ changing the field alone cannot authorize a different recipient. Follow the
 Configuration status does not verify the key or delivery. Missing/invalid settings
 remain visible and do not block screening or the independent fallback email.
 
-Alerts use **Amber at 50, Red at 75 and Critical at 90**. A Gemini scam judgment
+By default alerts use **Amber at 50, Red at 75 and Critical at 90**; the WhatsApp
+control changes the minimum score that triggers a message. A Gemini scam judgment
 or a matched caller number independently raises tier 75, even without a qualifying
 score. Repeated scores and jitter do not resend an attempted tier; a direct jump
 to 90 sends only the highest pending alert. Each new session can alert again.
-Messages include the actual calculated score and available criterion evidence,
-or explicitly say conversation scores are not yet available. They contain no raw
-transcript, invented identity, voice-match percentage, callback number or listen-in
-link, and do not claim a warning was played when that was not established.
+Messages address the contact and listener by configured names and include a short
+Gemini conversation summary, attributed caller claims, family inconsistencies and
+the actual score. A number-only alert explicitly says the conversation is not yet
+available. Summaries can be mistaken; they are labeled as AI summaries. Messages do
+not invent voice matching, callback numbers, listen-in links or playback completion.
+The summary shares relevant conversation details with your selected contacts; the
+complete raw transcript is not included.
+
+An initial short debounce (3 seconds, bounded at 6 during continuous changes)
+combines nearby assessments into one alert with the highest severity and latest
+summary. Later escalations wait for the configured per-contact gap; pending updates
+coalesce. Ending a session discards an escalation still waiting for that gap rather
+than delaying shutdown or sending it later. Pausing cancels pending work. These
+limits are session-local; a new screening session can alert again. The application
+cannot control how WhatsApp groups messages or how CallMeBot queues them downstream.
 
 CallMeBot has no documented idempotency key, so each tier is attempted once with a
 bounded timeout and **no automatic retry**. A timeout or ambiguous response leaves
 delivery unknown: resending could duplicate an already queued message. Only the
-documented queue acknowledgement displays **Guardian alerted at [time] — [alert
+documented queue acknowledgement displays **Guardian alert accepted at [time] — [alert
 level]**. The banner tracks WhatsApp and email separately and explains that provider
 acceptance is not confirmed delivery. The activity graph shows real request and
 failure states. Development tests and diagnostics never send real guardian messages.
@@ -179,7 +236,7 @@ identities, so they may alert again; restarting is not a delivery recovery mecha
 
 Emails contain severity, UTC time, caller context and available criterion scores,
 without raw transcripts. A number-only alert explicitly says scores are not yet available.
-Only a successful Resend response adds email to **Guardian alerted at [time] — [alert level]**
+Only a successful Resend response adds email to **Guardian alert accepted at [time] — [alert level]**
 in the frontend. The banner also explains that this is API acceptance, not confirmed
 inbox delivery. Errors, retry attempts and missing configuration never show a success banner. “Accepted by Resend” is not verified inbox delivery. No delivery webhook
 is installed. **Development and `doctor --live` never send real email**; transport tests
@@ -194,8 +251,8 @@ preserved: `LLM_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai
 are accepted; there is no fallback to another LLM. API keys stay on the server.
 
 ```bash
-uv run scam-the-scamers doctor         # Configuration only; no network or messages
-uv run scam-the-scamers doctor --live  # Bounded synthetic Gemini/Gradium probes; API credits
+uv run scam-the-scammers doctor         # Configuration only; no network or messages
+uv run scam-the-scammers doctor --live  # Bounded synthetic Gemini/Gradium probes; API credits
 ```
 
 `doctor --live` exits 0 only when both Gemini examples, Gradium TTS and nonempty
@@ -218,7 +275,7 @@ middle context on long calls. Provider failures produce an unavailable assessmen
 new speech can trigger the next attempt. Pause/disconnect cancels in-flight work.
 
 While waiting, audio stays in the browser. During screening, Gradium processes audio,
-Google processes bounded transcript/lookup context, and configured CallMeBot/Resend
+Google processes personal Settings text plus bounded transcript/lookup context, and configured CallMeBot/Resend
 alerts process the risk summary and contact addresses. CallMeBot requires its key,
 recipient and encoded message in a HTTPS query; application HTTP debug logging is
 suppressed for that request. The app does not store or log audio/transcripts;
