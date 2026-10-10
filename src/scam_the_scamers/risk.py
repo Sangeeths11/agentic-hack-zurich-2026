@@ -2,7 +2,7 @@
 
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, computed_field
 
 CRITERIA = {
     "family_claim": "Family-member claim",
@@ -37,7 +37,6 @@ class Scores(BaseModel):
 class Assessment(BaseModel):
     model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
     criteria: Scores
-    overall: Score
     warning_text: (
         Literal[
             "Hey, this call sounds suspicious. Be cautious.",
@@ -47,14 +46,11 @@ class Assessment(BaseModel):
         | None
     ) = None
 
-    @model_validator(mode="after")
-    def aggregate_matches(self) -> "Assessment":
-        expected = self.criteria.aggregate()
-        if abs(self.overall - expected) > 1:
-            raise ValueError("Overall score does not follow the published weighted rubric")
-        # Normalize rounding only; never invent scores if any field is invalid.
-        self.overall = expected
-        return self
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def overall(self) -> float:
+        """Server-calculated output; excluded from the Gemini input schema."""
+        return self.criteria.aggregate()
 
 
 def tier(score: float) -> int:
@@ -73,7 +69,8 @@ Score evidence for each criterion 0–100: 0 absent, 25 ambiguous, 50 plausible,
 emotional_distress (arrest, accident, emergency), urgency (pressure to act now),
 secrecy (hide from family/authorities), financial_request (money/cash/personal financial
 information), courier_pickup (someone collecting payment). A family claim alone is normal.
-Return all six criterion scores. Overall MUST be their weighted sum rounded to one decimal:
+Return only all six criterion scores and optional warning_text; do not return an overall.
+The application calculates the overall screening indicator from the validated criteria:
 0.05*family_claim + 0.10*emotional_distress + 0.20*urgency + 0.20*secrecy +
 0.25*financial_request + 0.20*courier_pickup. This is an uncalibrated screening indicator,
 NOT a probability or accusation. A number match is contextual evidence from a blocklist,

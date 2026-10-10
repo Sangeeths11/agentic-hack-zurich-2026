@@ -7,7 +7,7 @@ from support import DemoFactory, assessment, microphone_audio, next_event, simul
 from scam_the_scamers.agent import TranscriptBuffer
 from scam_the_scamers.caller import CallerLookup
 from scam_the_scamers.providers import ProviderError, TranscriptEvent
-from scam_the_scamers.risk import CRITERIA, WARNINGS
+from scam_the_scamers.risk import CRITERIA, WARNINGS, Assessment
 
 
 @pytest.mark.parametrize(
@@ -66,6 +66,43 @@ async def test_accumulated_context_coalesced_and_single_flight_revisions():
         assert "Mum" in factory.classifier.calls[-1][0]
         assert "courier" in factory.classifier.calls[-1][0]
         assert factory.classifier.calls[-1][1].status == "matched"
+    finally:
+        await session.close()
+
+
+@pytest.mark.parametrize(
+    "warning,threshold,spoken", [(False, 50, False), (True, 60, True), (True, 61, False)]
+)
+async def test_partial_scenario_computed_total_drives_ui_email_and_warning(
+    warning, threshold, spoken
+):
+    result = Assessment.model_validate(
+        {
+            "criteria": dict(zip(CRITERIA, [100, 100, 100, 0, 100, 0], strict=True)),
+            "warning_text": WARNINGS[0] if warning else None,
+        }
+    )
+    settings = simulation_settings(
+        warning_threshold=threshold,
+        resend_api_key="fake",
+        alert_from_email="sender@example.com",
+        fallback_email="caregiver@example.com",
+    )
+    factory = DemoFactory(settings, result)
+    session = await factory.open(CallerLookup("not_provided"), "computed")
+    try:
+        await session.send_audio(microphone_audio())
+        event = await next_event(session, "assessment")
+        assert event.payload["overall"] == 60
+        assert event.payload["criteria"] == result.criteria.model_dump()
+        await asyncio.wait_for(session.alerts.pending.join(), 1)
+        assert session.alerts.highest_accepted == 50
+        assert len(factory.email.calls) == 1
+        if spoken:
+            assert (await next_event(session, "warning")).payload["text"] == WARNINGS[0]
+        else:
+            await asyncio.wait_for(session.warning_queue.join(), 1)
+            assert not factory.speech.calls
     finally:
         await session.close()
 

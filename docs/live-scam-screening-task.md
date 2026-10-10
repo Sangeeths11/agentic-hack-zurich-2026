@@ -124,3 +124,25 @@ evidence, actual command results, branch/commits/checkpoints and honest limitati
 Separate captured development, fake/browser validation, real API probes, outstanding
 manual speakerphone test and unavailable Trails/Runners. No invented results, jury
 scores, token savings or email delivery; do not commit provider transcripts/secrets.
+
+## Accepted independent-review fixes
+
+The parent reproduced valid Gemini criteria being rejected because the model's
+weighted total was arithmetically inconsistent. Revise the model schema to return
+only six strictly validated criteria and optional warning text. Compute the total
+in application code, clearly identify it as calculated in the UI, and use it for
+colors, email tiers and warning gating. Preserve all six model scores; no wider
+arithmetic tolerance or fabricated safe scores. High scores without text stay silent.
+Retest the two reported partial family-emergency phrases and the live-provider
+synthetic browser flow without repeating unrelated expensive probes.
+
+Make `doctor --live` exit nonzero on failed provider checks, rejected credentials or
+missing transcription; genuine success exits zero. Test with injected providers.
+Retain the parent's successful independent synthetic browser result and distinguish
+it from a real phone-on-speaker test. Run required checks, update evidence, commit
+and push on the captured feature branch, verify local and remote checkpoint linkage,
+and refresh Brain with `--agent none --raw` on the clean committed checkout.
+
+After verification, confirm the old project server on port 8082 has no active call,
+gracefully restart only that server with the updated backend, verify health/config
+and leave the local demo ready. No real microphone activation or email sending.

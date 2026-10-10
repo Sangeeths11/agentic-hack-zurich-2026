@@ -35,7 +35,7 @@ this work. No Trail or hosted Runner evaluation was created or claimed. Local
 capture, Graph, Brain and checkpoint synchronization work independently of that
 external access limitation. Runner prompt changes preserve their JSON contracts.
 
-## Executed checks
+## Initial implementation checks
 
 | Command / check | Actual result |
 | --- | --- |
@@ -54,7 +54,7 @@ external access limitation. Runner prompt changes preserve their JSON contracts.
 Dataset SHA-256: `036afc2befaf7161242a70b5cb2570035052aa048c468c8916162c7b211b6889`.
 The dataset was neither downloaded nor rebuilt.
 
-Python coverage includes strict finite complete criteria/aggregate validation, bounded
+Initial Python coverage included strict finite complete criteria/aggregate validation, bounded
 safe warning phrases, all threshold boundaries, quiet score-only operation, high scores
 without warning text, independent warning threshold, repeated/rising/falling/jumping
 email tiers, fixed idempotent retry payloads, unconfigured and failed email, malformed/
@@ -72,7 +72,7 @@ view switching, mobile layout, denied microphone, unavailable assessments and mi
 readiness. Desktop/mobile screenshots in ignored `artifacts/` were visually inspected.
 These screenshots show synthetic fixtures, not real call assessments.
 
-## Real provider probes, separate from browser tests
+## Initial real provider probes, separate from browser tests
 
 `uv run scam-the-scamers doctor --live` used the existing private Gradium and Google
 credentials without altering `.env`, the configured Google endpoint, or
@@ -90,6 +90,80 @@ credentials without altering `.env`, the configured Google endpoint, or
 These are two functional model examples, not calibration, fraud detection accuracy or
 real telephone results. They also do not establish end-to-end browser-to-live-provider
 acoustic performance. **No real email was sent.** Resend tests use mock transport.
+
+## Independent review and executed fixes
+
+The parent independently verified Google's models endpoint returned HTTP 200 and
+included the existing `gemini-3.5-flash-lite`; no credential values were logged.
+Their successful real-provider Chrome run used 8.64 seconds of synthetic Gradium
+speech, reached all six scores 100 and overall 100/critical, started warning playback
+in muted Chrome, released mic/providers on pause and had zero page errors. Email was
+disabled. Earlier runs exposed unavailable partial assessments, including revisions
+5, 7 and 9; direct partial-phrase probes isolated rejected model aggregate arithmetic.
+The parent's temporary armed-before-trigger harness issue was separately corrected;
+it was not an application defect. This paragraph records parent-supplied evidence.
+
+Before review edits, `entire session current` again resolved to the same active
+session above and the current review prompt. The branch was clean at `2851ee6`.
+Brain reported a current manifest; graft callers mapped `Assessment` and
+`check_providers` before the changes. Existing task context was sufficient for this
+follow-up, without repeating the earlier Brain brief or structural Graph lookup.
+
+Gemini now returns only six strictly validated criterion scores and optional bounded
+warning text. The server calculates the weighted sum, rounded to one decimal, and
+serializes it as `overall`. The UI explicitly labels this **Calculated overall risk**
+and separately identifies all six Gemini evidence scores. There is no model overall
+field or arithmetic tolerance to fail. Missing, non-finite, out-of-range, blocked or
+malformed criteria still fail validation. Colors, email tiers and warning eligibility
+all use the same calculated total. High scores without warning text remain silent.
+The validation/serialization split follows Pydantic's documented
+[computed fields](https://docs.pydantic.dev/latest/concepts/fields/#the-computed_field-decorator);
+Google's [compatible structured output](https://ai.google.dev/gemini-api/docs/openai#structured-output)
+was rechecked, and the configured endpoint/model/credentials were preserved.
+
+`doctor --live` now reports an aggregate passed/failed status and exits 1 for any
+failed screening probe, missing transcription or cleanup failure; genuine success
+exits 0. Injected tests cover credential rejection, timeout, TTS/STT setup/stream
+failures, empty transcription, cleanup and successful probes. Diagnostics redact
+raw exception details and cancel the paired audio tasks after a stream failure.
+No email adapter is invoked. The full live doctor was not unnecessarily repeated.
+
+| Review check | Actual result |
+| --- | --- |
+| `uv run ruff check src tests` | Passed |
+| `uv run ruff format --check src tests` | 23 files already formatted |
+| `uv run mypy src` | Passed, 12 source files |
+| `uv run pytest -q` | 115 passed; one existing upstream TestClient deprecation warning |
+| `node --test tests/test_browser_audio.mjs` | 16 passed |
+| `uv build` | Source distribution and wheel built |
+| `uv run --with playwright python tests/browser_listener.py` | Passed; 3 synthetic sessions, zero page errors |
+| Runner comparison excluding `prompt.template`; `git diff --check` | Passed; contracts unchanged |
+
+Two bounded real Gemini calls repeated exactly the reported failing partial phrases:
+
+| Synthetic phrase/context | Family | Distress | Urgency | Secrecy | Financial | Courier | Calculated overall | Warning text |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| “I'm your daughter. I've been arrested. Bring five thousand francs within an hour.” | 100 | 100 | 100 | 0 | 100 | 0 | 60 | Present |
+| Same phrase, followed by “Tell nobody.” | 100 | 100 | 100 | 100 | 100 | 0 | 80 | Present |
+
+The new opt-in `tests/live_browser_listener.py --live` adapts the parent's harness,
+requires explicit API usage, supplies only synthetic audio and forcibly clears all
+Resend configuration. The first review rerun reached warning playback and displayed
+`100 / 100`, but a new harness assertion incorrectly parsed that formatted string
+as a float. After correcting the assertion, the complete command
+`uv run --with playwright python tests/live_browser_listener.py --live` passed:
+
+- 8.8 seconds of newly synthesized Gradium speech, streamed through real browser
+  audio, backend, Gradium STT and Gemini.
+- Six valid assessments and **zero unavailable assessments** through warning playback.
+- Final six criteria all 100; calculated overall 100; critical UI color.
+- Gradium warning TTS played through the browser scheduling path in muted Chrome.
+- Pause released microphone tracks and the backend session; zero page errors.
+- Resend disabled; no real email sent. Screenshot remains ignored in `artifacts/`.
+
+These are functional synthetic examples, not calibration, a real phone call or proof
+of audible/acoustic echo performance. The previous Trails API 404 remains an external
+access limitation; no new Trail or hosted Runner evaluation is claimed or retried.
 
 ## Demo and remaining limits
 

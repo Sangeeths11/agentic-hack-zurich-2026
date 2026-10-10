@@ -1,22 +1,33 @@
-"""Local listener startup and voice-provider diagnostics."""
+"""Local listener startup and screening-provider diagnostics."""
 
 import argparse
 import asyncio
 import json
 import logging
 import sys
+from collections.abc import Awaitable, Callable
 
 from pydantic import ValidationError
 
 from .config import Settings
+from .providers import Classifier, Speech, STTSession
 
 
-async def check_providers(settings: Settings) -> dict:
+async def check_providers(
+    settings: Settings,
+    *,
+    classifier: Classifier | None = None,
+    speech: Speech | None = None,
+    stt_open: Callable[[Settings], Awaitable[STTSession]] | None = None,
+) -> dict:
     """Bounded synthetic probes; never record a person or send an email."""
     from .caller import CallerLookup
     from .providers import GeminiClassifier, GradiumSTT, GradiumTTS, ProviderError
 
-    results: dict = {"email": "not tested; doctor never sends email"}
+    classifier = classifier if classifier is not None else GeminiClassifier(settings)
+    speech = speech if speech is not None else GradiumTTS(settings)
+    stt_open = stt_open if stt_open is not None else GradiumSTT.open
+    results: dict = {"status": "passed", "email": "not tested; doctor never sends email"}
     samples = {
         "family_only": "Hi, this is your daughter. Shall we have lunch on Sunday?",
         "scam_scenario": "Mum, it is your daughter. I have been arrested and I am terrified. "
@@ -25,21 +36,26 @@ async def check_providers(settings: Settings) -> dict:
     }
     for name, sample in samples.items():
         try:
-            result = await GeminiClassifier(settings).classify(sample, CallerLookup("not_provided"))
+            result = await asyncio.wait_for(
+                classifier.classify(sample, CallerLookup("not_provided")),
+                settings.request_timeout_seconds,
+            )
             results[name] = {
+                "status": "passed",
                 "overall": result.overall,
                 "criteria": result.criteria.model_dump(),
                 "warning_present": result.warning_text is not None,
             }
-        except (ProviderError, TimeoutError) as exc:
-            results[name] = str(exc) if isinstance(exc, ProviderError) else "timeout"
+        except Exception as exc:
+            results["status"] = "failed"
+            results[name] = str(exc) if isinstance(exc, ProviderError) else type(exc).__name__
     session = None
     try:
         import audioop
 
-        audio = await GradiumTTS(settings).synthesize("This is a synthetic screening audio test.")
+        audio = await speech.synthesize("This is a synthetic screening audio test.")
         results["tts"] = {"status": "passed", "pcm_bytes": len(audio)}
-        session = await GradiumSTT.open(settings)
+        session = await stt_open(settings)
         pcm, _ = audioop.ratecv(audio, 2, 1, 48000, 24000, None)
 
         async def feed():
@@ -57,14 +73,27 @@ async def check_providers(settings: Settings) -> dict:
                     segments += 1
             return segments
 
-        async with asyncio.timeout(30):
-            _, segments = await asyncio.gather(feed(), receive())
+        tasks = [asyncio.create_task(feed()), asyncio.create_task(receive())]
+        try:
+            async with asyncio.timeout(30):
+                _, segments = await asyncio.gather(*tasks)
+        finally:
+            for task in tasks:
+                task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
         results["stt"] = {"status": "passed" if segments else "no transcript", "segments": segments}
+        if not segments:
+            results["status"] = "failed"
     except Exception as exc:
+        results["status"] = "failed"
         results["gradium"] = str(exc) if isinstance(exc, ProviderError) else type(exc).__name__
     finally:
         if session is not None:
-            await asyncio.wait_for(session.close(), 3)
+            try:
+                await asyncio.wait_for(session.close(), 3)
+            except Exception as exc:
+                results["status"] = "failed"
+                results["cleanup"] = type(exc).__name__
     return results
 
 
@@ -105,7 +134,10 @@ def main() -> None:
             print("Screening configuration valid. This does not verify provider credentials.")
             print("Fallback email: " + settings.email_status() + ". No email sent.")
             if args.live:
-                print(json.dumps(asyncio.run(check_providers(settings)), indent=2))
+                results = asyncio.run(check_providers(settings))
+                print(json.dumps(results, indent=2))
+                if results["status"] != "passed":
+                    raise SystemExit(1)
     except ValidationError as exc:
         fields = sorted({str(error["loc"][0]).upper() for error in exc.errors()})
         print("Invalid configuration fields: " + ", ".join(fields), file=sys.stderr)

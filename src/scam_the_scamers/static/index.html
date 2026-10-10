@@ -151,13 +151,14 @@
               >
             </div>
             <section id="risk-panel" class="risk-panel" data-risk="unavailable" aria-label="Live risk scores">
-              <div class="risk-heading"><div><span>OVERALL RISK INDICATOR</span>
+              <div class="risk-heading"><div><span>CALCULATED OVERALL RISK</span>
                 <strong id="overall-score">—</strong></div><span id="risk-level">Waiting</span></div>
               <p id="assessment-status" role="status">Waiting for speech and a valid assessment.</p>
+              <p class="rubric-note">All six Gemini evidence scores</p>
               <div id="criteria-scores"></div>
               <p class="rubric-note">Evidence indicators, not a probability or proof of fraud. A family claim alone contributes at most 5 points.</p>
               <details><summary>How scores work</summary>
-                <p>Each criterion: 0 absent, 25 ambiguous, 50 plausible, 75 strong, 100 explicit evidence. Overall weights: family 5%, distress 10%, urgency 20%, secrecy 20%, financial request 25%, courier 20%. Below 50 green; 50 caution (amber); 75 high (red); 90 critical. Mistakes are possible. Verify independently.</p>
+                <p>Gemini returns the six criterion scores below. The server calculates the overall weighted sum, rounded to one decimal. Each criterion: 0 absent, 25 ambiguous, 50 plausible, 75 strong, 100 explicit evidence. Overall weights: family 5%, distress 10%, urgency 20%, secrecy 20%, financial request 25%, courier 20%. Below 50 green; 50 caution (amber); 75 high (red); 90 critical. Mistakes are possible. Verify independently.</p>
               </details>
             </section>
             <div class="pipeline" aria-label="Current audio status">

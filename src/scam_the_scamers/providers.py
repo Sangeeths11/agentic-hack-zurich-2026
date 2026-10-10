@@ -98,7 +98,7 @@ class GeminiClassifier:
                 "json_schema": {
                     "name": "call_assessment",
                     "strict": True,
-                    "schema": Assessment.model_json_schema(),
+                    "schema": Assessment.model_json_schema(mode="validation"),
                 },
             },
             "max_completion_tokens": 2048,

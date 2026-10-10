@@ -28,7 +28,6 @@ def simulation_settings(**overrides) -> Settings:
 def assessment(score=20, warning=False) -> Assessment:
     return Assessment(
         criteria=Scores(**dict.fromkeys(CRITERIA, float(score))),
-        overall=float(score),
         warning_text=WARNINGS[0] if warning else None,
     )
 

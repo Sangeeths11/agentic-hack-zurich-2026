@@ -8,8 +8,10 @@ the old listener-only scope: Gradium STT, Gemini six-criterion classification,
 the preserved suspicious-number SQLite lookup, optional Gradium warning TTS and
 Resend fallback email are integrated. No open-ended voice replies or greetings.
 
-Validate complete bounded scores and the published weighted rubric; scores are
-not calibrated fraud probabilities. Score-only assessments must never call TTS.
+Validate all six complete bounded model criteria; calculate the published weighted
+aggregate deterministically in the backend. Never rely on model arithmetic or reject
+valid criteria for a model-calculated sum. Label the calculated total separately from
+the six Gemini scores; these are not calibrated fraud probabilities. Score-only assessments must never call TTS.
 Email tiers are 50/75/90, with session-local idempotency and bounded retry.
 Missing email configuration must remain visible without blocking screening.
 Development tests must never send real email without separate explicit approval.

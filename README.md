@@ -39,9 +39,13 @@ cancels immediately during that grace period.
 
 Criterion scores describe evidence strength: 0 absent, 25 ambiguous, 50 plausible,
 75 strong, 100 explicit. They are model judgments, not calibrated probabilities.
-The overall screening indicator is the weighted sum below, rounded to one decimal.
-Gemini must return all six scores and the overall; invalid or inconsistent responses
-show unavailable, without fabricating scores or speech.
+Gemini returns all six criterion scores and optional warning text. All six model
+scores are displayed. The backend deterministically calculates the overall screening
+indicator using the weighted sum below, rounded to one decimal; the UI labels it
+**Calculated overall risk**. The model is not asked to return or validate that sum.
+This avoids losing valid evidence to model arithmetic errors. Malformed, incomplete
+or out-of-range criteria still show unavailable, without fabricating scores or speech.
+All overall colors, email tiers and spoken-warning eligibility use this calculated total.
 
 | Criterion | Example | Overall weight |
 | --- | --- | ---: |
@@ -125,6 +129,11 @@ uv run scam-the-scamers doctor         # Configuration only; no network or email
 uv run scam-the-scamers doctor --live  # Bounded synthetic Gemini/Gradium probes; API credits
 ```
 
+`doctor --live` exits 0 only when both Gemini examples, Gradium TTS and nonempty
+Gradium transcription succeed. Rejected credentials, provider/time-out/cleanup errors
+or missing transcription exit 1 with redacted diagnostics. Missing Resend settings
+are reported separately and do not fail the screening checks; email is never tested.
+
 Defaults: one session, five-minute cap, 20-second HTTP request timeout, 45-second STT
 heartbeat timeout, 20-second media timeout and 1.5 seconds between classification
 starts. No first-TTS timeout exists: low-risk sessions can remain silent throughout.
@@ -172,7 +181,18 @@ uv run --with playwright python tests/browser_listener.py  # Installed Chrome re
 ```
 
 Tests use fake providers, synthetic microphone audio and mock email transport, with no
-API keys required. The Chrome harness checks sound activation, six live scores/colors,
+API keys required. A separate opt-in check uses the existing Gradium/Gemini credentials
+and modest API credits, with generated speech as the microphone source:
+
+```bash
+uv run --with playwright python tests/live_browser_listener.py --live
+```
+
+It forcibly disables Resend, uses muted Chrome, checks valid partial assessments and
+calculated totals, warning playback, microphone/provider cleanup and page errors.
+It does not activate a physical microphone, send email or establish acoustic performance.
+
+The offline Chrome harness checks sound activation, six live scores/colors,
 low-risk silence, warning playback/suppression/cancellation, provider cleanup, end/quiet
 rearm, tabs/mobile layout, readiness and errors. See the
 [accepted work order](docs/live-scam-screening-task.md) and
