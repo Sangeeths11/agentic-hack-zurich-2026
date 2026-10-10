@@ -1,73 +1,73 @@
 # Scam the Scamers
 
-Ein lokaler Sprachagent, der neben deinem Handy mithört und über den Laptop
-antwortet. Handy auf Lautsprecher, Laptop daneben, Listener aktivieren.
+A local voice agent that listens beside your phone and responds through your
+laptop. Put your phone on speaker, place your laptop beside it, and enable the listener.
 
-## Starten
+## Getting started
 
-Voraussetzung: [uv](https://docs.astral.sh/uv/getting-started/installation/).
-Python 3.12 wird beim Setup installiert. Gradbot 0.1.9 unterstützt nativ
-macOS Apple Silicon und Linux x86_64.
+Requires [uv](https://docs.astral.sh/uv/getting-started/installation/).
+Setup installs Python 3.12. Gradbot 0.1.9 natively supports
+macOS on Apple Silicon and Linux x86_64.
 
 ```bash
 scripts/setup.sh
-# GRADIUM_API_KEY und LLM_API_KEY in .env eintragen
+# Add GRADIUM_API_KEY and LLM_API_KEY to .env
 scripts/run_local.sh
 ```
 
-**http://localhost:8082** öffnen, **Listener aktivieren** klicken und das Mikrofon
-freigeben. Der Browser muss AudioWorklet unterstützen. Tab und Rechner bleiben
-während des Gesprächs aktiv.
+Open **http://localhost:8082**, click **Enable listener**, and allow microphone
+access. Your browser must support AudioWorklet. Keep the tab open and your
+computer awake during the conversation.
 
-## So funktioniert es
+## How it works
 
-- Du nimmst den Anruf am Handy an und schaltest den Lautsprecher ein.
-- Der animierte Kreis zeigt den Mikrofonpegel. Nach 180 ms oberhalb der
-  einstellbaren Schwelle startet der Agent automatisch. Ein kurzer Vorlauf
-  erhält den Satzanfang während des Verbindungsaufbaus.
-- Der Agent stellt sich als KI-Assistent vor, hört zu und antwortet über die
-  Laptop-Lautsprecher. Du kannst seine Antwort unterbrechen.
-- **Gespräch beenden** lässt den Listener auf das nächste Gespräch warten.
-  Nach 30 Sekunden Stille oder dem Sitzungslimit geschieht dies automatisch.
-- **Listener pausieren** beendet die Sitzung, Wiedergabe und den Mikrofonzugriff.
+- Answer the call on your phone and turn on speakerphone.
+- The animated circle shows the microphone level. After 180 ms above the
+  adjustable threshold, the agent starts automatically. A short audio buffer
+  preserves the start of your sentence while the connection opens.
+- The agent introduces itself as an AI assistant, listens, and responds through
+  the laptop speakers. You can interrupt its reply.
+- **End conversation** returns the listener to waiting for the next conversation.
+  This also happens automatically after 30 seconds of silence or the session limit.
+- **Pause listener** ends the session, stops playback, and releases the microphone.
 
-Der Auslöser erkennt Lautstärke, keinen Anrufstatus. Auch Klingeln oder Musik
-können starten. Schwelle und Lautstärke an den Aufbau anpassen. Die angeforderte
-Echo-Unterdrückung hängt vom Browser und Gerät ab; mit einem zweiten Telefon testen.
+The trigger detects sound levels, not phone call status. Ringing or music can
+also activate it. Adjust the threshold and volume to suit your setup. The
+requested echo cancellation depends on your browser and device; test with a second phone.
 
-## Konfiguration
+## Configuration
 
-Nur `GRADIUM_API_KEY` und `LLM_API_KEY` sind erforderlich. `.env.example` enthält
-die weiteren Optionen: Modellanbieter, Modell, Name, Sprache, Stimme und Zeitlimits.
-Standard: Deutsch, `gpt-4o-mini`, eine Sitzung gleichzeitig, maximal fünf Minuten.
-Nach Änderungen den Server neu starten.
+Only `GRADIUM_API_KEY` and `LLM_API_KEY` are required. `.env.example` lists
+additional options: model provider, model, name, language, voice, and time limits.
+Defaults: English, `gpt-4o-mini`, one session at a time, and a five-minute session limit.
+Restart the server after changing configuration.
 
 ```bash
-uv run scam-the-scamers serve          # Server auf 127.0.0.1:8082
-uv run scam-the-scamers doctor         # nur Konfiguration prüfen
-uv run scam-the-scamers doctor --live  # echte Sprachdienste prüfen; nutzt API-Guthaben
+uv run scam-the-scamers serve          # Run the server on 127.0.0.1:8082
+uv run scam-the-scamers doctor         # Check configuration only
+uv run scam-the-scamers doctor --live  # Check live voice providers; uses API credits
 ```
 
-Im Wartezustand bleibt Audio im Browser. Während einer Sitzung verarbeiten
-Gradium und der konfigurierte Modellanbieter die Sprache. Die App speichert
-keine Aufnahmen oder Transkripte. API-Schlüssel bleiben auf dem Server.
-Verbindungsfehler pausieren den Listener und werden sichtbar angezeigt.
+While waiting, audio stays in the browser. During a session, Gradium and the
+configured model provider process speech. The app saves no recordings or
+transcripts. API keys stay on the server. Connection errors pause the listener
+and display an error message.
 
 ## Repository
 
 ```text
 src/scam_the_scamers/
-  agent.py          Sprachagent und Gradbot-Anbindung
-  bridge.py         Audiostream, Unterbrechungen und Sitzungslebenszyklus
-  config.py         Einstellungen und Provider-Schlüssel
-  main.py           Lokale HTTP-/WebSocket-Endpunkte
-  cli.py            Start und Diagnose
-  static/           Listener-Oberfläche und Browser-Audio
-scripts/            Setup und lokaler Start
-tests/              Audio-, Protokoll- und Browserprüfungen
+  agent.py          Voice agent and Gradbot integration
+  bridge.py         Audio streaming, interruptions, and session lifecycle
+  config.py         Settings and provider credentials
+  main.py           Local HTTP and WebSocket endpoints
+  cli.py            Startup and diagnostics
+  static/           Listener interface and browser audio
+scripts/            Setup and local startup
+tests/              Audio, protocol, and browser checks
 ```
 
-## Prüfen
+## Verification
 
 ```bash
 uv run ruff check src tests
@@ -78,12 +78,12 @@ node --test tests/test_browser_audio.mjs  # Node 22.7+
 uv build
 ```
 
-Optional mit installiertem Chrome:
+Optional, with Chrome installed:
 
 ```bash
 uv run --with playwright python tests/browser_listener.py
 ```
 
-Die Tests verwenden synthetisches Audio und benötigen keine API-Schlüssel.
-Der Browser-Test prüft automatische Aktivierung, Wiedergabe, Unterbrechung,
-Pause, Rückkehr nach Stille und verweigerte Mikrofonrechte.
+Tests use synthetic audio and require no API keys. The browser test covers
+automatic activation, playback, interruptions, pausing, returning to listening
+after silence, and denied microphone access.

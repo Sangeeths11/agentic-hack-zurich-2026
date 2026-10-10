@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="de">
+<html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -10,26 +10,27 @@
   </head>
   <body>
     <header>
-      <a class="brand" href="/" aria-label="Scam the Scamers Startseite"
-        ><span class="brand-icon">◉</span> scam the scamers<span class="brand-tag"
+      <a class="brand" href="/" aria-label="Scam the Scamers home"
+        ><span class="brand-icon">◉</span> scam the scamers<span
+          class="brand-tag"
           >LISTENER</span
         ></a
-      ><span class="local-badge"><i></i> Auf diesem Laptop</span>
+      ><span class="local-badge"><i></i> On this laptop</span>
     </header>
     <main>
       <div class="intro">
-        <p class="eyebrow">EIN OFFENES OHR. EINE STIMME AN DEINER SEITE.</p>
-        <h1>Einfach da.<br />Wenn jemand spricht.</h1>
+        <p class="eyebrow">A LISTENING EAR. A VOICE BY YOUR SIDE.</p>
+        <h1>Right here.<br />When someone speaks.</h1>
         <p>
-          Handy auf Lautsprecher. Laptop daneben.<br />Dein Assistent hört mit
-          und spricht für dich.
+          Phone on speaker. Laptop beside it.<br />Your assistant listens and
+          speaks for you.
         </p>
       </div>
-      <section class="listener-card" aria-label="Sprachassistent">
+      <section class="listener-card" aria-label="Voice assistant">
         <div class="card-top">
           <span
             ><i id="status-dot"></i
-            ><span id="mode-label">BEREIT ZUM ZUHÖREN</span></span
+            ><span id="mode-label">READY TO LISTEN</span></span
           ><span id="session-time">LOCAL / 01</span>
         </div>
         <div id="orb" class="orb" data-state="off" aria-hidden="true">
@@ -40,27 +41,25 @@
           </div>
         </div>
         <div class="state-copy" aria-live="polite" role="status">
-          <h2 id="status-title">
-            Einmal einschalten.<br />Dann einfach sprechen.
-          </h2>
+          <h2 id="status-title">Switch it on.<br />Then just speak.</h2>
           <p id="status-detail">
-            Aktiviere das Mikrofon, um den Listener bereitzumachen.
+            Enable your microphone to get the listener ready.
           </p>
         </div>
         <button id="toggle" class="primary" disabled>
           <span id="toggle-icon" aria-hidden="true">◉</span
-          ><span id="toggle-label">Wird vorbereitet …</span>
+          ><span id="toggle-label">Getting ready …</span>
         </button>
         <button id="end-session" class="text-button" hidden>
-          Gespräch beenden · weiter zuhören
+          End conversation · keep listening
         </button>
         <p id="error" class="error" role="alert" hidden></p>
         <div class="meter-row">
-          <span>MIKROFON</span>
+          <span>MICROPHONE</span>
           <div
             class="meter"
             role="meter"
-            aria-label="Mikrofonpegel"
+            aria-label="Microphone level"
             aria-valuemin="-70"
             aria-valuemax="0"
             aria-valuenow="-70"
@@ -71,10 +70,10 @@
           <span id="level-value">— dB</span>
         </div>
       </section>
-      <section class="settings" aria-label="Listener Einstellungen">
+      <section class="settings" aria-label="Listener settings">
         <div>
-          <label for="sensitivity">Wann soll der Agent starten?</label>
-          <p>Automatisch, sobald der Pegel die Schwelle kurz überschreitet.</p>
+          <label for="sensitivity">When should the agent start?</label>
+          <p>Automatically, when the sound briefly exceeds the threshold.</p>
         </div>
         <div class="slider-wrap">
           <input
@@ -87,7 +86,7 @@
             aria-describedby="sensitivity-value"
           /><output id="sensitivity-value" for="sensitivity">−38 dB</output>
           <div class="range-labels">
-            <span>Leise Stimmen</span><span>Laute Stimmen</span>
+            <span>Quiet voices</span><span>Loud voices</span>
           </div>
         </div>
       </section>
@@ -95,34 +94,34 @@
         <div>
           <span>01</span>
           <p>
-            <strong>Handy danebenlegen</strong>Anruf selbst annehmen und
-            Lautsprecher einschalten.
+            <strong>Place your phone nearby</strong>Answer the call and turn on
+            speakerphone.
           </p>
         </div>
         <div>
           <span>02</span>
           <p>
-            <strong>Listener aktivieren</strong>Mikrofon einmal erlauben. Der
-            Kreis zeigt den Pegel.
+            <strong>Enable the listener</strong>Allow microphone access once.
+            The circle shows the sound level.
           </p>
         </div>
         <div>
           <span>03</span>
           <p>
-            <strong>Gespräch laufen lassen</strong>Der Agent startet bei
-            Geräuschen und antwortet hörbar.
+            <strong>Let the conversation flow</strong>Sound activates the agent,
+            and it responds out loud.
           </p>
         </div>
       </div>
       <p class="privacy-note">
-        Im Wartezustand bleibt das Audio im Browser. Während eines Gesprächs
-        verarbeiten die KI-Anbieter die Sprache. Die App speichert keine
-        Aufnahme.
+        While waiting, audio stays in your browser. During a conversation, the
+        AI providers process speech. The app does not save recordings.
       </p>
     </main>
     <footer>
-      <span>SCAM THE SCAMERS <span class="footer-dot">/</span> LOCAL LISTENER</span
-      ><span>Der Auslöser hört Geräusche · er erkennt keinen Anrufstatus.</span>
+      <span
+        >SCAM THE SCAMERS <span class="footer-dot">/</span> LOCAL LISTENER</span
+      ><span>Triggered by sound · phone call status is not detected.</span>
     </footer>
   </body>
 </html>

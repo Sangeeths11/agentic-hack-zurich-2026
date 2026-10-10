@@ -8,9 +8,10 @@ from support import simulation_settings
 from scam_the_scamers.agent import GradbotFactory, GradbotSession, session_config
 
 
-def test_pinned_native_sdk_accepts_german_session_configuration():
+def test_pinned_native_sdk_accepts_english_session_configuration():
     config = session_config(simulation_settings())
-    assert config.language == gradbot.Lang.De
+    assert config.language == gradbot.Lang.En
+    assert "Speak English." in config.instructions
     assert config.assistant_speaks_first
     assert not config.tools
     assert config.voice_id is None

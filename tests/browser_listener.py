@@ -85,7 +85,7 @@ async def main():
                 await page.goto(f"http://127.0.0.1:{port}")
                 await wait_browser(page, "!document.querySelector('#toggle').disabled")
                 await page.screenshot(path=str(artifacts / "listener-desktop.png"), full_page=True)
-                await page.get_by_role("button", name="Listener aktivieren").click()
+                await page.get_by_role("button", name="Enable listener").click()
                 await wait_browser(page, "document.querySelector('#orb').dataset.state === 'armed'")
                 await page.wait_for_timeout(500)
                 assert not factory.sessions, "Silence must never open a provider session"
@@ -95,9 +95,9 @@ async def main():
                 await wait_browser(page, "testAudio.stops > 0")
                 assert len(factory.sessions) == 1
                 await page.screenshot(path=str(artifacts / "listener-active.png"), full_page=True)
-                await page.get_by_role("button", name="Gespräch beenden").click()
+                await page.get_by_role("button", name="End conversation").click()
                 await wait_browser(page, "document.querySelector('#orb').dataset.state === 'armed'")
-                await page.get_by_role("button", name="Listener pausieren").click()
+                await page.get_by_role("button", name="Pause listener").click()
                 await wait_browser(page, "document.querySelector('#orb').dataset.state === 'off'")
                 assert await page.evaluate(
                     "testAudio.stream.getTracks().every(t => t.readyState === 'ended')"
@@ -112,7 +112,7 @@ async def main():
                 )
 
                 # Restart and verify the automatic idle return, with a real worklet clock.
-                await page.get_by_role("button", name="Listener aktivieren").click()
+                await page.get_by_role("button", name="Enable listener").click()
                 await wait_browser(page, "document.querySelector('#orb').dataset.state === 'armed'")
                 await page.evaluate("testAudio.gain.gain.value = 0.12")
                 await wait_browser(
@@ -125,7 +125,7 @@ async def main():
                     deadline_ms=35000,
                 )
                 assert len(factory.sessions) == 2 and factory.sessions[1].closed
-                await page.get_by_role("button", name="Listener pausieren").click()
+                await page.get_by_role("button", name="Pause listener").click()
                 await page.set_viewport_size({"width": 390, "height": 844})
                 await page.screenshot(path=str(artifacts / "listener-mobile.png"), full_page=True)
                 assert await page.evaluate("document.documentElement.scrollWidth <= innerWidth")
@@ -136,9 +136,9 @@ async def main():
                     "() => { navigator.mediaDevices.getUserMedia = async () => { "
                     "throw new DOMException('denied', 'NotAllowedError'); }; }"
                 )
-                await page.get_by_role("button", name="Listener aktivieren").click()
+                await page.get_by_role("button", name="Enable listener").click()
                 await wait_browser(page, "document.querySelector('#orb').dataset.state === 'error'")
-                assert "Mikrofonzugriff nicht erlaubt" in await page.locator("#error").inner_text()
+                assert "Microphone access was denied" in await page.locator("#error").inner_text()
                 assert not app.state.registry.sockets
                 assert not errors, errors
                 print(

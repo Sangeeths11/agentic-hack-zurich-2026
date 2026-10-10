@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     llm_base_url: str = "https://api.openai.com/v1"
     llm_model: str = Field(default="gpt-4o-mini", min_length=1)
     operator_name: str = Field(default="Sangeeth", min_length=1, max_length=80)
-    agent_language: str = "de"
+    agent_language: str = "en"
     gradium_voice_id: str = ""
     gradium_base_url: str = ""
     max_concurrent_sessions: int = Field(default=1, ge=1, le=100)

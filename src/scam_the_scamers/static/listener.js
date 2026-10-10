@@ -19,39 +19,39 @@ let configured = false,
   maxSessionSeconds = 300;
 const states = {
   off: [
-    "BEREIT ZUM ZUHÖREN",
-    "Einmal einschalten. Dann einfach sprechen.",
-    "Aktiviere das Mikrofon, um den Listener bereitzumachen.",
+    "READY TO LISTEN",
+    "Switch it on. Then just speak.",
+    "Enable your microphone to get the listener ready.",
   ],
   armed: [
-    "LISTENER AKTIV",
-    "Ich höre hin.",
-    "Sobald jemand spricht, beginnt das Gespräch automatisch.",
+    "LISTENER ACTIVE",
+    "I'm listening.",
+    "The conversation starts automatically when someone speaks.",
   ],
   connecting: [
-    "STIMME ERKANNT",
-    "Ich bin gleich da.",
-    "Der Assistent verbindet sich. Der Satzanfang wird kurz gepuffert.",
+    "VOICE DETECTED",
+    "I'll be right there.",
+    "Your assistant is connecting. The start of your sentence is briefly buffered.",
   ],
   listening: [
-    "GESPRÄCH AKTIV",
-    "Ich höre zu.",
-    "Sprich ganz normal. Die Antwort kommt über den Laptop.",
+    "CONVERSATION ACTIVE",
+    "I'm listening.",
+    "Speak naturally. The reply will play through your laptop.",
   ],
   thinking: [
-    "GESPRÄCH AKTIV",
-    "Einen Moment …",
-    "Der Assistent bereitet seine Antwort vor.",
+    "CONVERSATION ACTIVE",
+    "One moment …",
+    "Your assistant is preparing a reply.",
   ],
   speaking: [
-    "GESPRÄCH AKTIV",
-    "Dein Assistent spricht.",
-    "Du kannst jederzeit dazwischenreden.",
+    "CONVERSATION ACTIVE",
+    "Your assistant is speaking.",
+    "You can interrupt at any time.",
   ],
   error: [
-    "LISTENER PAUSIERT",
-    "Kurz nachsehen.",
-    "Behebe den Hinweis und aktiviere den Listener erneut.",
+    "LISTENER PAUSED",
+    "Something needs attention.",
+    "Follow the instructions below, then enable the listener again.",
   ],
 };
 function setPhase(next) {
@@ -126,7 +126,7 @@ async function stop() {
   }
   document.documentElement.style.setProperty("--level", 0);
   $("level-value").textContent = "— dB";
-  $("toggle-label").textContent = "Listener aktivieren";
+  $("toggle-label").textContent = "Enable listener";
   $("toggle").disabled = !configured;
   stopping = false;
   setPhase("off");
@@ -141,7 +141,9 @@ function pump() {
   if (!socket || socket.readyState !== WebSocket.OPEN || phase === "connecting")
     return;
   if (socket.bufferedAmount > 96000) {
-    void fail("Die Audioverbindung ist zu langsam. Bitte erneut aktivieren.");
+    void fail(
+      "The audio connection is too slow. Please enable the listener again.",
+    );
     return;
   }
   // Catch up the bounded startup buffer gradually, preserving order without flooding the server.
@@ -150,12 +152,12 @@ function pump() {
 function play(data) {
   if (!context || context.state !== "running") return;
   if (!data.byteLength || data.byteLength % 2) {
-    void fail("Ungültiges Antwort-Audio. Bitte erneut aktivieren.");
+    void fail("Invalid response audio. Please enable the listener again.");
     return;
   }
   if (playbackUntil - context.currentTime > 12) {
     void fail(
-      "Die Sprachausgabe ist zu weit im Rückstand. Bitte erneut aktivieren.",
+      "Audio playback has fallen too far behind. Please enable the listener again.",
     );
     return;
   }
@@ -191,7 +193,7 @@ function startSession() {
   startupTimer = setTimeout(() => {
     if (socket === ws)
       void fail(
-        "Der Assistent konnte nicht rechtzeitig starten. Prüfe Server und API-Zugang.",
+        "The assistant did not start in time. Check the server and API credentials.",
       );
   }, 18000);
   ws.onopen = () => {
@@ -215,12 +217,12 @@ function startSession() {
     try {
       event = JSON.parse(data);
     } catch {
-      void fail("Ungültige Serverantwort.");
+      void fail("Invalid server response.");
       return;
     }
     if (event.event === "ready") {
       if (event.input_rate !== 24000 || event.output_rate !== 48000) {
-        void fail("Das Audioformat passt nicht zum Listener.");
+        void fail("The audio format is not compatible with the listener.");
         return;
       }
       clearTimeout(startupTimer);
@@ -240,23 +242,21 @@ function startSession() {
     else
       void fail(
         event.reason === "session-timeout"
-          ? "Die Sitzung hat ihr Zeitlimit erreicht oder der Anbieter antwortet nicht. Bitte erneut aktivieren."
-          : "Die Sprachverbindung wurde beendet. Prüfe API-Zugang, Server und ob bereits ein anderer Listener läuft.",
+          ? "The session reached its time limit or the provider is not responding. Please enable the listener again."
+          : "The voice connection ended. Check your API credentials, the server, and whether another listener is already running.",
       );
   };
   ws.onerror = () => {
     if (socket === ws)
       void fail(
-        "Keine Verbindung zum lokalen Sprachserver. Läuft scripts/run_local.sh?",
+        "Cannot connect to the local voice server. Is scripts/run_local.sh running?",
       );
   };
 }
 function onFrame({ pcm, rms }) {
   if (!enabled || !context) return;
   if (context.state !== "running") {
-    void fail(
-      "Die Audioausgabe wurde pausiert. Bitte den Listener erneut aktivieren.",
-    );
+    void fail("Audio playback was paused. Please enable the listener again.");
     return;
   }
   const now = performance.now();
@@ -279,7 +279,7 @@ function onFrame({ pcm, rms }) {
   pending.push(pcm);
   if (pending.length > 750) {
     void fail(
-      "Der Verbindungsaufbau dauert zu lange. Bitte erneut aktivieren.",
+      "Connecting is taking too long. Please enable the listener again.",
     );
     return;
   }
@@ -303,7 +303,7 @@ async function start() {
   const attempt = ++generation;
   $("error").hidden = true;
   $("toggle").disabled = true;
-  $("toggle-label").textContent = "Mikrofon freigeben …";
+  $("toggle-label").textContent = "Allow microphone access …";
   let acquired;
   try {
     if (
@@ -342,27 +342,29 @@ async function start() {
     capture.connect(context.destination);
     microphone.getAudioTracks()[0].onended = () => {
       if (enabled)
-        void fail("Das Mikrofon wurde getrennt. Bitte erneut aktivieren.");
+        void fail(
+          "The microphone was disconnected. Please enable the listener again.",
+        );
     };
     context.onstatechange = () => {
       if (enabled && context?.state !== "running")
-        void fail("Browser-Audio pausiert. Bitte erneut aktivieren.");
+        void fail("Browser audio is paused. Please enable the listener again.");
     };
     enabled = true;
     preparing = false;
     trigger.reset();
     cooldownUntil = 0;
-    $("toggle-label").textContent = "Listener pausieren";
+    $("toggle-label").textContent = "Pause listener";
     $("toggle").disabled = false;
     setPhase("armed");
   } catch (error) {
     if (attempt !== generation) return;
     const message =
       error.name === "NotAllowedError"
-        ? "Mikrofonzugriff nicht erlaubt. Erlaube das Mikrofon in den Browser-Einstellungen für localhost und versuche es erneut."
+        ? "Microphone access was denied. Allow microphone access for localhost in your browser settings, then try again."
         : error.name === "NotFoundError"
-          ? "Kein Mikrofon gefunden. Verbinde ein Mikrofon und aktiviere den Listener erneut."
-          : "Das Mikrofon konnte nicht starten. Öffne localhost in einem aktuellen Chrome, Edge, Firefox oder Safari und prüfe die Audio-Einstellungen.";
+          ? "No microphone found. Connect a microphone and enable the listener again."
+          : "The microphone could not start. Open localhost in an up-to-date Chrome, Edge, Firefox, or Safari browser and check your audio settings.";
     await fail(message);
   }
 }
@@ -390,15 +392,15 @@ try {
   configured = config.configured;
   maxSessionSeconds = config.max_session_seconds;
   $("toggle").disabled = !configured;
-  $("toggle-label").textContent = "Listener aktivieren";
+  $("toggle-label").textContent = "Enable listener";
   if (!configured) {
     $("error").textContent =
-      `Noch kurz einrichten: ${config.missing.join(", ")} in .env ergänzen, den Server neu starten und diese Seite neu laden.`;
+      `Finish setup: add ${config.missing.join(", ")} to .env, restart the server, and reload this page.`;
     $("error").hidden = false;
   }
 } catch {
   $("error").textContent =
-    "Der lokale Server ist nicht erreichbar. Starte scripts/run_local.sh und lade die Seite neu.";
+    "The local server is unavailable. Run scripts/run_local.sh and reload this page.";
   $("error").hidden = false;
-  $("toggle-label").textContent = "Server nicht erreichbar";
+  $("toggle-label").textContent = "Server unavailable";
 }
