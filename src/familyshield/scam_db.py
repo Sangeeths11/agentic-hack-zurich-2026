@@ -53,9 +53,7 @@ def is_scam_number(phone_number: str, db_path: str | Path | None = None) -> bool
     return lookup_scam_number(phone_number, db_path=db_path) is not None
 
 
-def lookup_scam_number(
-    phone_number: str, db_path: str | Path | None = None
-) -> ScamRecord | None:
+def lookup_scam_number(phone_number: str, db_path: str | Path | None = None) -> ScamRecord | None:
     """Look up a phone number in the scam database.
 
     Returns a ScamRecord if matched, or None otherwise.
