@@ -5,6 +5,7 @@ import audioop
 import base64
 import math
 import struct
+import tempfile
 import time
 import wave
 from pathlib import Path
@@ -30,6 +31,9 @@ def simulation_settings(**overrides) -> Settings:
         gradium_api_key="offline",
         llm_api_key="offline",
         public_http_url="https://simulation.example",
+        # Each call gets its own throwaway DB file so tests never share or
+        # pollute repo-local state.
+        contacts_db_path=tempfile.mktemp(suffix=".db"),
     )
     values.update(overrides)
     return Settings(_env_file=None, **values)

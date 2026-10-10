@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     gradium_voice_id: str = ""
     gradium_base_url: str = ""
     test_phone_number: str = ""
+    contacts_db_path: str = Field(default="familyshield.db", min_length=1)
     max_concurrent_calls: int = Field(default=2, ge=1, le=1000)
     max_call_seconds: float = Field(default=300, ge=10, le=2400)
     session_start_timeout_seconds: float = Field(default=15, ge=1, le=60)

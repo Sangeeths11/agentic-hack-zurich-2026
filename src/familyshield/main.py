@@ -14,6 +14,8 @@ from twilio.twiml.voice_response import Connect, VoiceResponse
 from .agent import AgentFactory, GradbotFactory
 from .bridge import CallRegistry, handle_stream
 from .config import Settings
+from .contacts import init_db
+from .screening import record_call_screening, screen_caller
 from .security import stream_ticket, valid_signature
 
 log = logging.getLogger(__name__)
@@ -24,6 +26,7 @@ def create_app(settings: Settings | None = None, factory: AgentFactory | None = 
     settings = settings if settings is not None else Settings()
     factory = factory if factory is not None else GradbotFactory(settings)
     registry = CallRegistry(settings.max_concurrent_calls)
+    init_db(settings.contacts_db_path)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -87,6 +90,21 @@ def create_app(settings: Settings | None = None, factory: AgentFactory | None = 
         call_sid = str(form.get("CallSid", ""))
         if not re.fullmatch(r"CA[0-9a-fA-F]{32}", call_sid):
             raise HTTPException(400, "Invalid CallSid")
+        caller_number = str(form.get("From", ""))
+        # A known number is a signal, not identity proof — caller IDs can be
+        # spoofed. This only logs/records the signal for now; it does not yet
+        # change routing.
+        screening = await screen_caller(settings, caller_number)
+        record_call_screening(
+            settings, call_sid=call_sid, caller_number=caller_number, result=screening
+        )
+        log.info(
+            "call_screened sid=%s known_contact=%s line_type=%s lookup_error=%s",
+            call_sid,
+            bool(screening.contact),
+            screening.lookup.line_type or "unknown",
+            bool(screening.lookup.error),
+        )
         response = VoiceResponse()
         if registry.draining or len(registry.sockets) >= registry.limit:
             response.reject(reason="busy")

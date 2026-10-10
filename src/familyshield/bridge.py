@@ -14,6 +14,8 @@ from fastapi import WebSocket, WebSocketDisconnect
 from .agent import AgentFactory, AgentSession
 from .audio import GRADBOT_INPUT_RATE, GRADBOT_OUTPUT_RATE, TWILIO_RATE, UlawResampler
 from .config import Settings
+from .contacts import call_is_known_contact, update_call_risk
+from .risk import UNKNOWN_NUMBER_POINTS, CallRiskScore
 from .security import valid_ticket
 
 log = logging.getLogger(__name__)
@@ -75,6 +77,22 @@ async def relay(
     first_audio = asyncio.Event()
     inbound = UlawResampler(TWILIO_RATE, GRADBOT_INPUT_RATE)
     outbound = UlawResampler(GRADBOT_OUTPUT_RATE, TWILIO_RATE)
+    # Seed the running risk score from the webhook's caller-ID screening
+    # (already logged for this call_sid) — a known enrolled contact starts
+    # clean; an unknown number starts with one signal already counted.
+    known = await asyncio.to_thread(call_is_known_contact, settings.contacts_db_path, call_sid)
+    risk_score = CallRiskScore(
+        score=0 if known else UNKNOWN_NUMBER_POINTS,
+        categories_hit=set() if known else {"unknown_number"},
+    )
+    if not known:
+        await asyncio.to_thread(
+            update_call_risk,
+            settings.contacts_db_path,
+            call_sid,
+            risk_score.score,
+            risk_score.tier,
+        )
 
     async def receive_caller() -> None:
         assert session is not None
@@ -127,6 +145,26 @@ async def relay(
             elif event.kind == "turn_end":
                 if turn_ended_at is None:
                     turn_ended_at = time.monotonic()
+            elif event.kind == "transcript":
+                # Backend rule, not an LLM decision — model output alone never
+                # authorises anything. The matched text itself is never logged,
+                # only the resulting score, tier, and which signals fired.
+                new_signals = risk_score.apply(event.text)
+                if new_signals:
+                    log.info(
+                        "call_risk sid=%s score=%d tier=%s new_categories=%s",
+                        call_sid,
+                        risk_score.score,
+                        risk_score.tier,
+                        ",".join(s.category for s in new_signals),
+                    )
+                    await asyncio.to_thread(
+                        update_call_risk,
+                        settings.contacts_db_path,
+                        call_sid,
+                        risk_score.score,
+                        risk_score.tier,
+                    )
             elif event.kind == "audio" and event.audio:
                 audio = outbound.convert(event.audio)
                 # Small frames keep the Twilio playback buffer responsive to clear.

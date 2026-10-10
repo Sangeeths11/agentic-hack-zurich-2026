@@ -19,8 +19,9 @@ from familyshield.simulation import (
 )
 
 
-def test_no_keys_fails_closed_but_liveness_works():
-    with TestClient(create_app(Settings(_env_file=None))) as client:
+def test_no_keys_fails_closed_but_liveness_works(tmp_path):
+    settings = Settings(_env_file=None, contacts_db_path=str(tmp_path / "test.db"))
+    with TestClient(create_app(settings)) as client:
         assert client.get("/healthz").status_code == 200
         assert client.get("/readyz").status_code == 503
         assert client.post("/twilio/voice").status_code == 503

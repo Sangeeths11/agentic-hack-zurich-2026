@@ -4,6 +4,7 @@ import argparse
 import asyncio
 import json
 import logging
+import re
 import sys
 import time
 from pathlib import Path
@@ -70,6 +71,14 @@ def main() -> None:
     commands.add_parser("call-me", help="Place one real call to TEST_PHONE_NUMBER")
     simulation = commands.add_parser("simulate", help="Offline signed Twilio/audio/interrupt test")
     simulation.add_argument("--output", type=Path, default=Path("artifacts/simulation.wav"))
+    contacts_cmd = commands.add_parser("contacts", help="Manage the enrolled contact directory")
+    contacts_sub = contacts_cmd.add_subparsers(dest="contacts_command", required=True)
+    add_contact_cmd = contacts_sub.add_parser("add", help="Enroll a contact")
+    add_contact_cmd.add_argument("--name", required=True)
+    add_contact_cmd.add_argument("--phone", required=True, help="E.164, e.g. +41790000000")
+    add_contact_cmd.add_argument("--relationship", default="")
+    add_contact_cmd.add_argument("--role", default="relative", choices=["relative", "caregiver"])
+    contacts_sub.add_parser("list", help="List enrolled contacts")
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     # Twilio/httpx INFO logs can contain phone numbers or account URLs.
@@ -95,6 +104,28 @@ def main() -> None:
                 timeout_graceful_shutdown=10,
                 log_level="info",
             )
+            return
+        if args.command == "contacts":
+            from .contacts import add_contact, init_db, list_contacts
+
+            init_db(settings.contacts_db_path)
+            if args.contacts_command == "add":
+                if not re.fullmatch(r"\+[1-9]\d{7,14}", args.phone):
+                    raise OperatorError("--phone must be E.164, e.g. +41790000000")
+                contact = add_contact(
+                    settings.contacts_db_path,
+                    name=args.name,
+                    phone_number=args.phone,
+                    relationship=args.relationship,
+                    role=args.role,
+                )
+                print(f"Added contact #{contact.id}: {contact.name} ({contact.role})")
+            else:
+                for contact in list_contacts(settings.contacts_db_path):
+                    print(
+                        f"{contact.id}\t{contact.name}\t{contact.phone_number}"
+                        f"\t{contact.relationship}\t{contact.role}"
+                    )
             return
         missing = settings.missing()
         if missing:
