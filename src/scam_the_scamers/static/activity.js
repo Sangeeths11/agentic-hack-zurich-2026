@@ -97,7 +97,7 @@ function setView(view) {
 viewButtons.forEach((button) => {
   button.addEventListener("click", () => setView(button.dataset.view));
 });
-setView(window.matchMedia("(max-width: 760px)").matches ? "listener" : "split");
+setView("listener");
 
 export function showTool(event) {
   const tool = event.tool === "db" ? "lookup" : event.tool;

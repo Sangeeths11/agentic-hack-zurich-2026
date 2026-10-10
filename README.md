@@ -50,8 +50,10 @@ Keep the tab open and computer awake. Sound above the adjustable threshold for
 180 ms starts screening; a bounded pre-roll preserves the start of speech.
 Ringing or music can trigger it. The app cannot detect call acceptance or caller ID.
 
-The responsive workspace offers **Split view**, **Listener** and **Tools & activity**.
-Switching views does not interrupt audio. Scores start as waiting, never invented zeroes.
+The responsive workspace opens in **Listener**, with microphone controls, risk scores
+and the screening flow. **Tools & activity** holds personal settings, the transcript
+and the activity log; **Split view** shows both workspaces. Switching views does not
+interrupt audio. Scores start as waiting, never invented zeroes.
 A live pipeline graph highlights actual microphone, backend, SQLite, Gradium STT,
 Gemini, local scoring, Gradium TTS, playback, CallMeBot and Resend activity. Streaming connections
 and individual requests have distinct states. The most recent 60 events stay only in

@@ -1,5 +1,28 @@
 # Live scam screening: evidence and demo
 
+## Colleague design import
+
+Imported the presentation changes from the user-supplied
+`agentic-hack-zurich-2026-main.zip` on `codex/colleague-design`, based on `bc1e038`.
+Archive SHA-256: `df9531fe025a9707ed4ea78c665ce86c10401e3f4b08394340aa6daf9ae5d0bd`.
+The import includes the logo, HTML layout, stylesheet and default Listener view.
+The archive's older backend files, environment, caches and virtual environment
+were excluded. All 91 existing element IDs and input bounds were retained.
+
+The new Listener view contains capture controls, scores and the provider flow;
+Tools & activity contains personal settings, transcript and activity. Existing
+behavior explanations and accessible status announcements were preserved. A
+critical-score contrast issue and overflowing score/flow grids were corrected.
+The browser harness follows the new view arrangement while retaining its existing
+functional assertions and adds checks for score readability and non-overlapping
+content. Runtime assessment, audio, profile parsing and messaging logic are unchanged.
+
+Validation: 289 Python tests, 22 JavaScript tests, Ruff lint/format, mypy and the
+build passed. The synthetic Chrome harness completed six sessions with no page
+errors, covering view switches during capture, warning playback, settings edits,
+transcripts, guardian states and microphone cleanup. Tests used fake providers;
+no real audio-provider, email or WhatsApp request was sent for this design import.
+
 ## Replacement guardian and HTTP 403 formatting investigation
 
 On 2026-10-10 the replacement recipient/key matched both the local server

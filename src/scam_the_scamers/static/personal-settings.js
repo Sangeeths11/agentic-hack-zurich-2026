@@ -67,7 +67,7 @@ export function createPersonalSettings({ onSaved }) {
     $("guardian-fallback").hidden = replacesFallback;
     $("guardian-override-status").hidden = !replacesFallback;
     $("guardian-override-status").textContent = profile.emergency_contacts.length
-      ? `WhatsApp uses the ${profile.emergency_contacts.length} emergency contact${profile.emergency_contacts.length === 1 ? "" : "s"} in Personal settings below. Each number needs its matching server key.`
+      ? `WhatsApp uses the ${profile.emergency_contacts.length} emergency contact${profile.emergency_contacts.length === 1 ? "" : "s"} in Personal settings under Tools & activity. Each number needs its matching server key.`
       : "No emergency contacts saved. WhatsApp alerts are disabled; fallback email is configured separately.";
   }
   function accept(value, requestId) {

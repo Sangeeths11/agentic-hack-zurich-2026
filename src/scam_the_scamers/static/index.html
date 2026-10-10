@@ -3,298 +3,241 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#f5f5ef" />
+    <meta name="theme-color" content="#11151c" />
     <title>Scam the Scammers · Listener</title>
+    <link rel="icon" href="/assets/logo.png" type="image/png" />
     <link rel="stylesheet" href="/assets/listener.css" />
     <script type="module" src="/assets/listener.js"></script>
   </head>
   <body>
-    <header>
-      <a class="brand" href="/" aria-label="Scam the Scammers home"
-        ><span class="brand-icon">◉</span> Scam the Scammers<span
-          class="brand-tag"
-          >LISTENER</span
-        ></a
-      ><span class="local-badge"><i></i> On this laptop</span>
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="Scam the Scammers home">
+        <img src="/assets/logo.png" alt="Scam the Scammers — scam caught, live" />
+      </a>
+      <div class="view-switch" role="group" aria-label="Workspace view">
+        <button type="button" data-view="listener" aria-pressed="true" aria-controls="listener-panel">Listener</button>
+        <button type="button" data-view="tools" aria-pressed="false" aria-controls="tools-panel">Tools &amp; activity</button>
+        <button type="button" data-view="split" aria-pressed="false" aria-controls="listener-panel tools-panel">Split view</button>
+      </div>
+      <span class="local-badge"><i></i> On this laptop</span>
     </header>
+
+    <aside id="guardian-banner" class="guardian-banner" role="status" hidden>
+      <strong id="guardian-message"></strong>
+      <p id="guardian-note">Accepted by the provider. Delivery is unverified.</p>
+    </aside>
+
     <main>
-      <div class="intro">
-        <p class="eyebrow">A LISTENING EAR. A MOMENT TO THINK.</p>
-        <h1>Listen with a little backup.</h1>
-        <p>
-          Spot warning signs as you talk. Keep your phone on speaker and your
-          laptop nearby.
-        </p>
-      </div>
-      <div class="workspace-toolbar">
-        <span class="workspace-label">YOUR WORKSPACE</span>
-        <div class="view-switch" role="group" aria-label="Workspace view">
-          <button
-            type="button"
-            data-view="split"
-            aria-pressed="true"
-            aria-controls="listener-panel tools-panel"
-          >
-            Split view
-          </button>
-          <button
-            type="button"
-            data-view="listener"
-            aria-pressed="false"
-            aria-controls="listener-panel"
-          >
-            Listener
-          </button>
-          <button
-            type="button"
-            data-view="tools"
-            aria-pressed="false"
-            aria-controls="tools-panel"
-          >
-            Tools &amp; activity
-          </button>
-        </div>
-      </div>
-      <aside id="guardian-banner" class="guardian-banner" role="status" hidden>
-        <strong id="guardian-message"></strong>
-        <p id="guardian-note">Accepted by the provider. Delivery is unverified.</p>
-      </aside>
-      <div id="workspace" class="workspace" data-view="split">
-        <div id="listener-panel" aria-label="Listener workspace">
-          <div class="panel-heading">
-            <span>01 / LISTENER</span><span>LIVE AUDIO</span>
-          </div>
-          <section class="listener-card" aria-label="Call screening listener">
-            <div class="card-top">
-              <span
-                ><i id="status-dot"></i
-                ><span id="mode-label">READY TO LISTEN</span></span
-              ><span id="session-time">LOCAL / 01</span>
+      <h1 class="sr-only">Scam the Scammers call screening</h1>
+      <div id="workspace" class="workspace" data-view="listener">
+        <!-- Main screen: listener, calculated total, screening flow -->
+        <div id="listener-panel" class="listener-panel" aria-label="Listener workspace">
+          <section class="card listener-card" aria-label="Call screening listener">
+            <div class="card-head">
+              <span class="label"><i id="status-dot"></i><span id="mode-label">READY TO LISTEN</span></span>
+              <span id="session-time" class="label mono">LOCAL / 01</span>
             </div>
-            <div id="orb" class="orb" data-state="off" aria-hidden="true">
-              <div class="orbit orbit-one"></div>
-              <div class="orbit orbit-two"></div>
-              <div class="orb-core">
-                <div class="wave"><b></b><b></b><b></b><b></b><b></b></div>
+
+            <div class="orb-wrap">
+              <div id="orb" class="orb" data-state="off" aria-hidden="true">
+                <div class="orbit orbit-one"></div>
+                <div class="orbit orbit-two"></div>
+                <div class="orb-core">
+                  <div class="wave"><b></b><b></b><b></b><b></b><b></b></div>
+                </div>
+              </div>
+              <div class="state-copy" aria-live="polite" role="status">
+                <h2 id="status-title">Switch it on. Then just speak.</h2>
+                <p id="status-detail">Enable your microphone to get the listener ready.</p>
               </div>
             </div>
-            <div class="state-copy" aria-live="polite" role="status">
-              <h2 id="status-title">Switch it on.<br />Then just speak.</h2>
-              <p id="status-detail">
-                Enable your microphone to get the listener ready.
-              </p>
-            </div>
-            <div class="call-settings">
-              <label for="caller-number">Caller number <span>(optional)</span></label>
-              <div class="number-input"><input id="caller-number" type="tel" maxlength="64" autocomplete="off"
-                placeholder="+41 79 123 45 67" aria-describedby="caller-help" /><button id="check-number" type="button">Check number</button></div>
-              <p id="caller-help">Enter an international number, or a Swiss local number. The microphone cannot detect caller ID.</p>
-              <p id="caller-check-status" class="caller-check-status" role="status" hidden></p>
-              <div id="guardian-fallback" class="guardian-settings">
-                <label for="guardian-phone">Fallback guardian WhatsApp number <span>(optional)</span></label>
-                <input id="guardian-phone" type="tel" maxlength="64" autocomplete="off" placeholder="+41 79 123 45 67" aria-describedby="guardian-help whatsapp-status" />
-                <p id="guardian-help">Use an international number (+ or 00), or a Swiss local number. The guardian must activate CallMeBot for this number; its matching API key stays on the server. Edits apply when screening next starts. Clear the number to disable WhatsApp. Editing sends no message.</p>
-                <p id="whatsapp-status" role="status">Checking WhatsApp configuration…</p>
-              </div>
-              <p id="guardian-override-status" class="guardian-override" role="status" hidden></p>
-              <p id="fallback-status" role="status">Checking fallback email configuration…</p>
-              <p class="provider-note">During screening, Gradium transcribes audio and Gemini assesses the text. Configured guardian alerts send a risk summary via CallMeBot (WhatsApp) and Resend (email).</p>
-            </div>
+
             <button id="toggle" class="primary" disabled>
-              <span id="toggle-icon" aria-hidden="true">◉</span
-              ><span id="toggle-label">Getting ready …</span>
+              <span id="toggle-icon" aria-hidden="true">●</span><span id="toggle-label">Getting ready …</span>
             </button>
-            <button id="end-session" class="text-button" hidden>
-              End screening · keep listening
-            </button>
-            <button id="cancel-warning" class="text-button" hidden>Stop warning audio</button>
+            <div class="inline-actions">
+              <button id="end-session" class="text-button" hidden>End screening · keep listening</button>
+              <button id="cancel-warning" class="text-button" hidden>Stop warning audio</button>
+            </div>
             <p id="error" class="error" role="alert" hidden></p>
+
             <div class="meter-row">
-              <span>MICROPHONE</span>
-              <div
-                class="meter"
-                role="meter"
-                aria-label="Microphone level"
-                aria-valuemin="-70"
-                aria-valuemax="0"
-                aria-valuenow="-70"
-              >
+              <span class="label">MIC</span>
+              <div class="meter" role="meter" aria-label="Microphone level" aria-valuemin="-70" aria-valuemax="0" aria-valuenow="-70">
                 <div id="level"></div>
                 <i id="threshold-line"></i>
               </div>
-              <span id="level-value">— dB</span>
+              <span id="level-value" class="mono">— dB</span>
+            </div>
+
+            <section class="settings" aria-label="Listener settings">
+              <div class="field-head">
+                <label for="sensitivity">Start screening above</label>
+                <output id="sensitivity-value" for="sensitivity" class="mono">−38 dB</output>
+              </div>
+              <input id="sensitivity" type="range" min="-55" max="-20" value="-38" step="1" aria-describedby="sensitivity-value" />
+              <div class="range-labels"><span>Quiet voices</span><span>Loud voices</span></div>
+            </section>
+
+            <div class="call-settings">
+              <div class="field">
+                <label for="caller-number">Caller number <span>optional</span></label>
+                <div class="number-input">
+                  <input id="caller-number" type="tel" maxlength="64" autocomplete="off" placeholder="+41 79 123 45 67" aria-describedby="caller-help" />
+                  <button id="check-number" type="button">Check number</button>
+                </div>
+                <p id="caller-help" class="help">International or Swiss local number. The microphone cannot detect caller ID.</p>
+                <p id="caller-check-status" class="caller-check-status" role="status" hidden></p>
+              </div>
+
+              <div id="guardian-fallback" class="guardian-settings field">
+                <label for="guardian-phone">Fallback guardian WhatsApp <span>optional</span></label>
+                <input id="guardian-phone" type="tel" maxlength="64" autocomplete="off" placeholder="+41 79 123 45 67" aria-describedby="guardian-help whatsapp-status" />
+                <p id="guardian-help" class="help">The guardian must activate CallMeBot for this number; its key stays on the server. Applies when screening next starts. Editing sends nothing.</p>
+                <p id="whatsapp-status" class="status-line" role="status">Checking WhatsApp configuration…</p>
+              </div>
+              <p id="guardian-override-status" class="guardian-override" role="status" hidden></p>
+              <p id="fallback-status" class="status-line" role="status">Checking fallback email configuration…</p>
+              <p class="help">Gradium transcribes, Gemini assesses. Configured guardians receive a risk summary via CallMeBot and Resend.</p>
             </div>
           </section>
-          <section class="personal-settings" aria-labelledby="personal-settings-title">
-            <div class="section-heading"><h2 id="personal-settings-title">Personal settings</h2><span class="count-badge">LIVE EDITABLE</span></div>
-            <p class="settings-intro">Help the listener understand your family and alert the right people. Changes are parsed automatically, including while you listen.</p>
-            <label for="personal-details">Settings — about you, your family and emergency contacts</label>
-            <textarea id="personal-details" rows="5" maxlength="6000" autocomplete="off" spellcheck="false" aria-describedby="personal-details-help profile-save-status" placeholder="My name is Margaret. Emily is my daughter. In an emergency, contact Emily on +41 79 123 45 67. Tyler is my grandson; he lives in Bern."></textarea>
-            <div class="settings-text-meta"><p id="personal-details-help">Include each emergency contact's name, relationship and phone number. Review the extracted details below.</p><span id="personal-details-count">0 / 6000</span></div>
+
+          <section id="risk-panel" class="card risk-panel" data-risk="unavailable" aria-label="Live risk scores">
+            <div class="card-head">
+              <span class="label">CALCULATED ADDITIVE TOTAL</span>
+              <span id="risk-level">Waiting</span>
+            </div>
+            <strong id="overall-score">—</strong>
+            <p id="risk-warning" class="risk-warning" role="alert" hidden></p>
+            <p id="assessment-status" class="help" role="status">Waiting for speech and a valid assessment.</p>
+            <p class="label criteria-label">SIX GEMINI EVIDENCE SCORES</p>
+            <div id="criteria-scores"></div>
+            <p class="rubric-note">Evidence indicators, not a probability or proof of fraud. A scam judgment or listed number can flag the call independently of the total.</p>
+            <details class="how-scores">
+              <summary>How scores work</summary>
+              <p>Each criterion: 0 absent · 25 ambiguous · 50 plausible · 75 strong · 100 explicit. The server adds all six, caps at 100 and rounds to one decimal. Colors change at 50 / 75 / 90. Personal settings control spoken-warning and WhatsApp thresholds. Gemini's scam judgment and a suspicious-number match can raise the alert level independently. Mistakes are possible. Verify independently.</p>
+            </details>
+          </section>
+
+          <section class="card flow-card" aria-labelledby="graph-title">
+            <div class="card-head">
+              <h3 id="graph-title" class="label">SCREENING FLOW</h3>
+              <span class="graph-legend"><i></i> Active now</span>
+            </div>
+            <div class="flow-graph" aria-label="Live tool graph">
+              <svg class="flow-lines" viewBox="0 0 600 488" preserveAspectRatio="none" aria-hidden="true">
+                <defs><marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" /></marker></defs>
+                <path d="M 178 52 H 218" data-to="backend" />
+                <path d="M 378 52 H 418" data-to="lookup" />
+                <path d="M 300 92 V 112 H 100 V 136" data-to="stt" />
+                <path d="M 178 180 H 218" data-to="gemini" />
+                <path d="M 378 180 H 418" data-to="scoring" />
+                <path d="M 500 224 V 246 H 100 V 264" data-to="tts" />
+                <path d="M 500 224 V 264" data-to="callmebot" />
+                <path d="M 578 180 H 592 V 436 H 578" data-to="resend" />
+                <path d="M 178 308 H 218" data-to="speaker" />
+              </svg>
+              <div id="microphone-stage" class="flow-node" data-active="false"><span class="node-kind">BROWSER</span><h3>Microphone</h3><p id="microphone-status">Off</p></div>
+              <div id="agent-stage" class="flow-node" data-active="false"><span class="node-kind">LOCAL SERVER</span><h3>Backend</h3><p id="agent-status">Disconnected</p></div>
+              <div id="node-lookup" class="flow-node" data-active="false"><span class="node-kind">LOCAL SQLITE</span><h3>Lookup</h3><p id="tool-db">Not checked</p></div>
+              <div id="node-stt" class="flow-node" data-active="false"><span class="node-kind">GRADIUM</span><h3>Transcribe</h3><p id="tool-stt">Idle</p></div>
+              <div id="node-gemini" class="flow-node" data-active="false"><span class="node-kind">GEMINI</span><h3>Assess</h3><p id="tool-gemini">Waiting for speech</p></div>
+              <div id="node-scoring" class="flow-node" data-active="false"><span class="node-kind">LOCAL SERVER</span><h3>Score</h3><p id="tool-scoring">Waiting for assessment</p></div>
+              <div id="node-tts" class="flow-node" data-active="false"><span class="node-kind">GRADIUM</span><h3>Warn aloud</h3><p id="tool-tts">No warning requested</p></div>
+              <div id="speaker-stage" class="flow-node" data-active="false"><span class="node-kind">BROWSER</span><h3>Speaker</h3><p id="speaker-status">Quiet</p></div>
+              <div id="node-callmebot" class="flow-node" data-active="false"><span class="node-kind">CALLMEBOT</span><h3>WhatsApp</h3><p id="tool-callmebot">Checking configuration</p></div>
+              <p class="guardian-flow-note">Guardian alerts follow the alert level. Provider acceptance does not confirm delivery.</p>
+              <div id="node-resend" class="flow-node" data-active="false"><span class="node-kind">RESEND</span><h3>Email</h3><p id="tool-resend">Checking configuration</p></div>
+            </div>
+            <p id="caller-result" class="rubric-note">No number checked. A missing match never proves safety.</p>
+            <p id="warning-text" role="status" hidden></p>
+            <p class="rubric-note flow-foot">Highlights follow actual microphone, server and provider activity.</p>
+          </section>
+        </div>
+
+        <!-- Secondary tab: personal settings, transcript, activity -->
+        <section id="tools-panel" class="tools-panel" aria-labelledby="tools-title" hidden>
+          <h2 id="tools-title" class="sr-only">Tools &amp; activity</h2>
+
+          <section class="card personal-settings" aria-labelledby="personal-settings-title">
+            <div class="card-head">
+              <h2 id="personal-settings-title" class="label">PERSONAL SETTINGS</h2>
+              <span class="count-badge">LIVE</span>
+            </div>
+            <p class="settings-intro">Tell the listener about your family and who to alert. Changes are parsed automatically, even while listening.</p>
+            <label for="personal-details" class="sr-only">Settings — about you, your family and emergency contacts</label>
+            <textarea id="personal-details" rows="5" maxlength="6000" autocomplete="off" spellcheck="false" aria-describedby="personal-details-help profile-save-status" placeholder="My name is Margaret. Emily is my daughter. In an emergency, contact Emily on +41 79 123 45 67."></textarea>
+            <div class="settings-text-meta">
+              <p id="personal-details-help">Include each contact's name, relationship and phone number.</p>
+              <span id="personal-details-count" class="mono">0 / 6000</span>
+            </div>
             <p id="profile-save-status" class="profile-save-status" role="status">Loading personal settings…</p>
             <button id="profile-retry" class="text-button" type="button" hidden>Retry saving settings</button>
+
             <div class="profile-preview" aria-label="Parsed personal settings">
               <h3 id="profile-listener-name">Your name is not set yet</h3>
-              <details id="profile-context-details" class="profile-context-details" hidden><summary>Context used by screening</summary><p id="profile-context" hidden></p></details>
-              <div id="emergency-contacts" aria-label="Emergency contacts"></div>
-              <p id="contacts-empty">No emergency contacts extracted yet. Add names and phone numbers above.</p>
-              <p class="rubric-note">Each WhatsApp recipient must activate CallMeBot and have a matching API key configured on the server. A name alone cannot receive an alert.</p>
-            </div>
-            <div class="alert-preferences">
-              <h3>Alert sensitivity</h3>
-              <div class="preference-control"><label for="warning-threshold">Spoken warning threshold</label><output id="warning-threshold-value" for="warning-threshold">50 / 100</output><input id="warning-threshold" type="range" min="1" max="100" step="1" value="50" /></div>
-              <div class="preference-control"><label for="whatsapp-threshold">WhatsApp alert threshold</label><output id="whatsapp-threshold-value" for="whatsapp-threshold">50 / 100</output><input id="whatsapp-threshold" type="range" min="1" max="100" step="1" value="50" /></div>
-              <div class="preference-control"><label for="whatsapp-cooldown-seconds">WhatsApp cooldown between alerts</label><output id="whatsapp-cooldown-seconds-value" for="whatsapp-cooldown-seconds">60s</output><input id="whatsapp-cooldown-seconds" type="range" min="0" max="300" step="1" value="60" /></div>
-              <p class="rubric-note">Higher thresholds reduce score-triggered alerts. Independent scam flags can still qualify. Spoken warnings also require eligible caution text. Saving settings while idle sends no alert. Changes during screening reassess the call.</p>
-            </div>
-            <p class="settings-privacy">Kept only in server memory until restart; never saved to browser storage. Gemini processes this text to extract your settings and assess the call in context.</p>
-          </section>
-          <section class="settings" aria-label="Listener settings">
-            <div>
-              <label for="sensitivity">When should screening start?</label>
-              <p>
-                Automatically, when the sound briefly exceeds the threshold.
-              </p>
-            </div>
-            <div class="slider-wrap">
-              <input
-                id="sensitivity"
-                type="range"
-                min="-55"
-                max="-20"
-                value="-38"
-                step="1"
-                aria-describedby="sensitivity-value"
-              /><output id="sensitivity-value" for="sensitivity">−38 dB</output>
-              <div class="range-labels">
-                <span>Quiet voices</span><span>Loud voices</span>
-              </div>
-            </div>
-          </section>
-        </div>
-        <section id="tools-panel" aria-labelledby="tools-title">
-          <div class="panel-heading">
-            <span>02 / TOOLS &amp; ACTIVITY</span><span>LIVE VISIBILITY</span>
-          </div>
-          <div class="activity-card">
-            <div class="activity-heading">
-              <div>
-                <p class="eyebrow">LIVE SCREENING</p>
-                <h2 id="tools-title">Tools &amp; activity</h2>
-              </div>
-              <span id="activity-status" class="activity-status" role="status"
-                >Standby</span
-              >
-            </div>
-            <section id="risk-panel" class="risk-panel" data-risk="unavailable" aria-label="Live risk scores">
-              <div class="risk-heading"><div><span>CALCULATED ADDITIVE TOTAL</span>
-                <strong id="overall-score">—</strong></div><span id="risk-level">Waiting</span></div>
-              <p id="risk-warning" class="risk-warning" role="alert" hidden></p>
-              <p id="assessment-status" role="status">Waiting for speech and a valid assessment.</p>
-              <p class="rubric-note">All six Gemini evidence scores</p>
-              <div id="criteria-scores"></div>
-              <p class="rubric-note">Evidence indicators, not a probability or proof of fraud. A scam judgment or listed number can flag the call independently of the total.</p>
-              <details><summary>How scores work</summary>
-                <p>Gemini assesses six criteria against the accumulated conversation. Each score: 0 absent, 25 ambiguous, 50 plausible, 75 strong, 100 explicit evidence. The server adds all six scores, caps the total at 100 and rounds to one decimal. Risk colors use 50 (caution), 75 (high) and 90 (critical). Personal settings control spoken-warning and WhatsApp thresholds. Gemini's scam judgment and a suspicious-number match can raise the alert level independently. Mistakes are possible. Verify independently.</p>
+              <details id="profile-context-details" class="profile-context-details" hidden>
+                <summary>Context used by screening</summary>
+                <p id="profile-context" hidden></p>
               </details>
-            </section>
-            <section class="tools-section" aria-labelledby="graph-title">
-              <div class="section-heading"><h3 id="graph-title">Screening flow</h3><span class="graph-legend"><i></i> Active now</span></div>
-              <p class="graph-description">Audio → transcript → assessment → response. Highlights follow actual activity.</p>
-              <div class="flow-graph" aria-label="Live tool graph">
-                <svg class="flow-lines" viewBox="0 0 600 488" preserveAspectRatio="none" aria-hidden="true">
-                  <defs><marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" /></marker></defs>
-                  <path d="M 178 52 H 218" data-to="backend" />
-                  <path d="M 378 52 H 418" data-to="lookup" />
-                  <path d="M 300 92 V 112 H 100 V 136" data-to="stt" />
-                  <path d="M 178 180 H 218" data-to="gemini" />
-                  <path d="M 378 180 H 418" data-to="scoring" />
-                  <path d="M 500 224 V 246 H 100 V 264" data-to="tts" />
-                  <path d="M 500 224 V 264" data-to="callmebot" />
-                  <path d="M 578 180 H 592 V 436 H 578" data-to="resend" />
-                  <path d="M 178 308 H 218" data-to="speaker" />
-                </svg>
-                <div id="microphone-stage" class="flow-node" data-active="false"><span class="node-kind">BROWSER</span><h3>Microphone</h3><p id="microphone-status">Off</p></div>
-                <div id="agent-stage" class="flow-node" data-active="false"><span class="node-kind">LOCAL SERVER</span><h3>Backend</h3><p id="agent-status">Disconnected</p></div>
-                <div id="node-lookup" class="flow-node" data-active="false"><span class="node-kind">LOCAL SQLITE</span><h3>Number lookup</h3><p id="tool-db">Not checked</p></div>
-                <div id="node-stt" class="flow-node" data-active="false"><span class="node-kind">GRADIUM API</span><h3>Speech to text</h3><p id="tool-stt">Idle</p></div>
-                <div id="node-gemini" class="flow-node" data-active="false"><span class="node-kind">GEMINI API</span><h3>Assess context</h3><p id="tool-gemini">Waiting for speech</p></div>
-                <div id="node-scoring" class="flow-node" data-active="false"><span class="node-kind">LOCAL SERVER</span><h3>Add scores</h3><p id="tool-scoring">Waiting for assessment</p></div>
-                <div id="node-tts" class="flow-node" data-active="false"><span class="node-kind">GRADIUM API</span><h3>Warning voice</h3><p id="tool-tts">No warning requested</p></div>
-                <div id="speaker-stage" class="flow-node" data-active="false"><span class="node-kind">BROWSER</span><h3>Speaker</h3><p id="speaker-status">Quiet</p></div>
-                <div id="node-callmebot" class="flow-node" data-active="false"><span class="node-kind">CALLMEBOT API</span><h3>Guardian WhatsApp</h3><p id="tool-callmebot">Checking configuration</p></div>
-                <p class="guardian-flow-note">Guardian alerts follow the call's alert level. A highlighted provider is sending; acceptance does not confirm delivery.</p>
-                <div id="node-resend" class="flow-node" data-active="false"><span class="node-kind">RESEND API</span><h3>Guardian email</h3><p id="tool-resend">Checking configuration</p></div>
-              </div>
-              <p id="caller-result" class="rubric-note">No number checked. A missing match never proves safety.</p>
-              <p id="warning-text" role="status" hidden></p>
-            </section>
-            <section class="transcript-section" aria-labelledby="transcript-title">
-              <div class="section-heading"><h3 id="transcript-title">Live transcript</h3><span id="transcript-state" class="count-badge">Waiting</span></div>
-              <p id="transcript-empty" class="transcript-empty">Speech will appear here when Gradium transcribes it.</p>
-              <div id="transcript-text" class="transcript-text" tabindex="0" aria-label="Current conversation transcript" hidden></div>
-              <p id="transcript-note" class="rubric-note">Kept in memory for this session. Cleared when screening ends.</p>
-              <p class="rubric-note">Caller / You labels are inferred from conversation text, not voice identity. Speaker attribution can be wrong.</p>
-            </section>
-            <div class="activity-section">
-              <div class="section-heading">
-                <h3>Live activity</h3>
-                <button
-                  id="clear-activity"
-                  class="clear-button"
-                  type="button"
-                  disabled
-                >
-                  Clear activity
-                </button>
-              </div>
-              <p id="activity-empty" class="activity-empty">
-                Enable the listener to see actual screening activity here.
-              </p>
-              <ol
-                id="activity-log"
-                class="activity-log"
-                aria-label="Recent activity, newest first"
-              ></ol>
-              <p id="activity-announcement" class="sr-only" role="status"></p>
+              <div id="emergency-contacts" aria-label="Emergency contacts"></div>
+              <p id="contacts-empty" class="help">No emergency contacts extracted yet.</p>
+              <p class="rubric-note">Each WhatsApp recipient needs CallMeBot activated and a matching server key.</p>
             </div>
-            <p class="activity-note">
-              Latest 60 events · kept on this page only
-            </p>
-          </div>
+
+            <div class="alert-preferences">
+              <h3 class="label">ALERT SENSITIVITY</h3>
+              <div class="preference-control">
+                <label for="warning-threshold">Spoken warning threshold</label>
+                <output id="warning-threshold-value" for="warning-threshold" class="mono">50 / 100</output>
+                <input id="warning-threshold" type="range" min="1" max="100" step="1" value="50" />
+              </div>
+              <div class="preference-control">
+                <label for="whatsapp-threshold">WhatsApp alert threshold</label>
+                <output id="whatsapp-threshold-value" for="whatsapp-threshold" class="mono">50 / 100</output>
+                <input id="whatsapp-threshold" type="range" min="1" max="100" step="1" value="50" />
+              </div>
+              <div class="preference-control">
+                <label for="whatsapp-cooldown-seconds">WhatsApp cooldown</label>
+                <output id="whatsapp-cooldown-seconds-value" for="whatsapp-cooldown-seconds" class="mono">60s</output>
+                <input id="whatsapp-cooldown-seconds" type="range" min="0" max="300" step="1" value="60" />
+              </div>
+              <p class="rubric-note">Higher thresholds reduce score-triggered alerts. Independent scam flags still qualify. Spoken warnings also require eligible caution text. Saving while idle sends nothing. Changes during screening reassess the call.</p>
+            </div>
+            <p class="settings-privacy">Server memory only until restart. Never saved to browser storage. Gemini processes this text to extract settings and assess the call in context.</p>
+          </section>
+
+          <section class="card transcript-section" aria-labelledby="transcript-title">
+            <div class="card-head">
+              <h3 id="transcript-title" class="label">LIVE TRANSCRIPT</h3>
+              <span id="transcript-state" class="count-badge">Waiting</span>
+            </div>
+            <p id="transcript-empty" class="transcript-empty">Speech appears here once Gradium transcribes it.</p>
+            <div id="transcript-text" class="transcript-text" tabindex="0" aria-label="Current conversation transcript" hidden></div>
+            <p id="transcript-note" class="rubric-note">Kept in memory for this session. Cleared when screening ends.</p>
+            <p class="rubric-note">Caller / You labels are inferred from text, not voice identity. Speaker attribution can be wrong.</p>
+          </section>
+
+          <section class="card activity-section" aria-label="Live activity">
+            <div class="card-head">
+              <h3 class="label">LIVE ACTIVITY</h3>
+              <span class="head-actions">
+                <span id="activity-status" class="activity-status" role="status">Standby</span>
+                <button id="clear-activity" class="clear-button" type="button" disabled>Clear activity</button>
+              </span>
+            </div>
+            <p id="activity-empty" class="activity-empty">Enable the listener to see screening activity.</p>
+            <ol id="activity-log" class="activity-log" aria-label="Recent activity, newest first"></ol>
+            <p id="activity-announcement" class="sr-only" role="status"></p>
+            <p class="activity-note">Latest 60 events · kept on this page only</p>
+          </section>
         </section>
       </div>
-      <div class="steps">
-        <div>
-          <span>01</span>
-          <p>
-            <strong>Place your phone nearby</strong>Answer the call and turn on
-            speakerphone.
-          </p>
-        </div>
-        <div>
-          <span>02</span>
-          <p>
-            <strong>Enable the listener</strong>Allow microphone access once.
-            The circle shows the sound level.
-          </p>
-        </div>
-        <div>
-          <span>03</span>
-          <p>
-            <strong>Let the conversation flow</strong>Sound starts screening. Scores update quietly; eligible cautions play aloud.
-          </p>
-        </div>
-      </div>
-      <p class="privacy-note">
-        While waiting, audio stays in your browser. During a conversation, the
-        AI providers process audio and text. The app does not save recordings or transcripts.
-      </p>
     </main>
+
     <footer>
-      <span
-        >SCAM THE SCAMMERS <span class="footer-dot">/</span> LOCAL LISTENER</span
-      ><span>Triggered by sound · phone call status is not detected.</span>
+      <span class="mono">SCAM THE SCAMMERS <span class="footer-dot">/</span> LOCAL LISTENER</span>
+      <span>Phone on speaker, laptop nearby. Sound starts screening; call status is not detected. AI providers process audio and text during screening. The app never saves recordings or transcripts.</span>
     </footer>
   </body>
 </html>

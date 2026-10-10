@@ -125,7 +125,9 @@ async def main():
                 await page.goto(f"http://127.0.0.1:{port}")
                 await wait_browser(page, "!document.querySelector('#toggle').disabled")
                 assert await page.locator("#listener-panel").is_visible()
-                assert await page.locator("#tools-panel").is_visible()
+                assert not await page.locator("#tools-panel").is_visible()
+                assert await page.locator("#risk-panel").is_visible()
+                assert await page.locator(".flow-graph").is_visible()
                 assert "not configured" in await page.locator("#fallback-status").inner_text()
                 assert "WhatsApp disabled" in await page.locator("#whatsapp-status").inner_text()
                 await page.locator("#guardian-phone").fill("wrong-number")
@@ -189,6 +191,7 @@ async def main():
                 assert await page.locator("#tool-db").inner_text() == "not provided"
                 assert await page.locator("#node-gemini").get_attribute("data-active") == "false"
                 assert await page.locator("#tool-scoring").inner_text() == "complete"
+                await page.get_by_role("button", name="Split view", exact=True).click()
                 assert (
                     "Synthetic family emergency"
                     in await page.locator("#transcript-text").inner_text()
@@ -226,6 +229,20 @@ async def main():
                         await page.locator("#criterion-secrecy").get_attribute("data-risk")
                         == "green"
                     )
+                    if score == 90:
+                        assert await page.locator("#overall-score").evaluate(
+                            """(score) => {
+                              const foreground = getComputedStyle(score).color;
+                              for (let node = score; node; node = node.parentElement) {
+                                const background = getComputedStyle(node).backgroundColor;
+                                if (background !== 'transparent' &&
+                                    background !== 'rgba(0, 0, 0, 0)') {
+                                  return foreground !== background;
+                                }
+                              }
+                              return false;
+                            }"""
+                        ), "Critical total must remain readable against its panel background"
                 await wait_browser(page, "testAudio.starts > 0")
                 before_calls = len(factory.classifier.calls)
                 before_frames = len(factory.stts[0].received)
@@ -260,6 +277,18 @@ async def main():
                     assert title in activity, activity
                 assert "delivered" not in activity.lower()
                 assert await page.locator("#microphone-status").inner_text() == "Listening"
+                assert await page.evaluate(
+                    """() => document.querySelector('#criteria-scores').lastElementChild
+                      .getBoundingClientRect().bottom <= document.querySelector(
+                        '#risk-panel .rubric-note').getBoundingClientRect().top"""
+                ), "All six criteria must fit above the scoring explanation in Split view"
+                assert await page.evaluate(
+                    """() => Math.max(...[
+                      document.querySelector('.flow-graph'),
+                      ...document.querySelectorAll('.flow-node'),
+                    ].map(node => node.getBoundingClientRect().bottom)) <=
+                      document.querySelector('#caller-result').getBoundingClientRect().top"""
+                ), "The flow graph and its nodes must fit above the caller result in Split view"
                 await page.screenshot(path=str(artifacts / "listener-active.png"), full_page=True)
                 # Changing the workspace view must leave the audio session untouched.
                 await page.get_by_role("button", name="Tools & activity", exact=True).click()
@@ -372,10 +401,11 @@ async def main():
                 await page.get_by_role("button", name="Tools & activity", exact=True).click()
                 assert await page.locator("#guardian-banner").is_visible()
                 assert await page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+                await page.get_by_role("button", name="Listener", exact=True).click()
+                assert await page.locator(".flow-graph").is_visible()
                 await page.screenshot(
                     path=str(artifacts / "listener-flow-mobile.png"), full_page=True
                 )
-                await page.get_by_role("button", name="Listener", exact=True).click()
                 await page.set_viewport_size({"width": 1280, "height": 1080})
                 await factory.stts[-1].events.put(TranscriptEvent("text", " synthetic" * 2000))
                 await wait_browser(
@@ -477,6 +507,7 @@ async def main():
                 await page.set_viewport_size({"width": 1280, "height": 1080})
                 await page.locator("#caller-number").fill("")
                 before_alerts = len(factory.whatsapp.calls)
+                await page.get_by_role("button", name="Tools & activity", exact=True).click()
                 await page.locator("#personal-details").fill("My name is Old. Slow profile.")
                 await wait_browser(
                     page,
@@ -531,9 +562,11 @@ async def main():
                 factory.classifier.result = assessment(20).model_copy(
                     update={"speaker_assignments": [SpeakerAssignment(turn_id=1, role="caller")]}
                 )
+                await page.get_by_role("button", name="Listener", exact=True).click()
                 await page.get_by_role("button", name="Enable listener").click()
                 await wait_browser(page, "document.querySelector('#orb').dataset.state === 'armed'")
                 await page.evaluate("testAudio.gain.gain.value = 0.12")
+                await page.get_by_role("button", name="Split view", exact=True).click()
                 await wait_browser(
                     page,
                     "document.querySelector('#transcript-text').textContent"
@@ -655,13 +688,14 @@ async def main():
                 await wait_browser(
                     page, "document.querySelector('#personal-details').value.includes('Margaret')"
                 )
+                await page.get_by_role("button", name="Tools & activity", exact=True).click()
                 assert await page.locator("#personal-details").input_value() == PERSONAL_TEXT
                 assert await page.locator("#warning-threshold").input_value() == "95"
                 assert await page.evaluate(
                     "localStorage.length === 0 && sessionStorage.length === 0"
                 )
                 await page.set_viewport_size({"width": 390, "height": 844})
-                await page.get_by_role("button", name="Listener", exact=True).click()
+                assert await page.locator(".personal-settings").is_visible()
                 assert await page.evaluate("document.documentElement.scrollWidth <= innerWidth")
                 await page.locator(".personal-settings").screenshot(
                     path=str(artifacts / "listener-personalized-mobile.png"), animations="disabled"
@@ -690,6 +724,7 @@ async def main():
                     "() => { navigator.mediaDevices.getUserMedia = async () => { "
                     "throw new DOMException('denied', 'NotAllowedError'); }; }"
                 )
+                await page.get_by_role("button", name="Listener", exact=True).click()
                 await page.get_by_role("button", name="Enable listener").click()
                 await wait_browser(page, "document.querySelector('#orb').dataset.state === 'error'")
                 assert "Microphone access was denied" in await page.locator("#error").inner_text()
