@@ -84,6 +84,9 @@ async def main():
                 await page.add_init_script(SYNTHETIC_MICROPHONE)
                 await page.goto(f"http://127.0.0.1:{port}")
                 await wait_browser(page, "!document.querySelector('#toggle').disabled")
+                assert await page.locator("#listener-panel").is_visible()
+                assert await page.locator("#tools-panel").is_visible()
+                assert await page.get_by_text("No tools connected yet", exact=True).is_visible()
                 await page.screenshot(path=str(artifacts / "listener-desktop.png"), full_page=True)
                 await page.get_by_role("button", name="Enable listener").click()
                 await wait_browser(page, "document.querySelector('#orb').dataset.state === 'armed'")
@@ -94,11 +97,38 @@ async def main():
                 await page.evaluate("testAudio.gain.gain.value = 0")
                 await wait_browser(page, "testAudio.stops > 0")
                 assert len(factory.sessions) == 1
+                activity = await page.locator("#activity-log").inner_text()
+                for title in (
+                    "Listener enabled",
+                    "Sound detected",
+                    "Agent connected",
+                    "Preparing a reply",
+                    "Agent speaking",
+                    "Reply interrupted",
+                ):
+                    assert title in activity, activity
+                assert await page.locator("#microphone-status").inner_text() == "Listening"
                 await page.screenshot(path=str(artifacts / "listener-active.png"), full_page=True)
+                # Changing the workspace view must leave the audio session untouched.
+                await page.get_by_role("button", name="Tools & activity", exact=True).click()
+                assert not await page.locator("#listener-panel").is_visible()
+                assert await page.locator("#tools-panel").is_visible()
+                assert await page.evaluate(
+                    "testAudio.stream.getTracks().every(t => t.readyState === 'live')"
+                )
+                assert len(factory.sessions) == 1 and not factory.sessions[0].closed
+                await page.get_by_role("button", name="Clear activity", exact=True).click()
+                assert await page.locator("#activity-log li").count() == 0
+                assert await page.locator("#activity-status").inner_text() == "Live"
+                await page.get_by_role("button", name="Listener", exact=True).click()
+                assert not await page.locator("#tools-panel").is_visible()
                 await page.get_by_role("button", name="End conversation").click()
                 await wait_browser(page, "document.querySelector('#orb').dataset.state === 'armed'")
+                assert "Ended by you" in await page.locator("#activity-log").inner_text()
                 await page.get_by_role("button", name="Pause listener").click()
                 await wait_browser(page, "document.querySelector('#orb').dataset.state === 'off'")
+                assert await page.locator("#microphone-status").inner_text() == "Off"
+                assert await page.locator("#activity-status").inner_text() == "Standby"
                 assert await page.evaluate(
                     "testAudio.stream.getTracks().every(t => t.readyState === 'ended')"
                 )
@@ -125,11 +155,26 @@ async def main():
                     deadline_ms=35000,
                 )
                 assert len(factory.sessions) == 2 and factory.sessions[1].closed
+                assert "30 seconds of quiet" in await page.locator("#activity-log").inner_text()
                 await page.get_by_role("button", name="Pause listener").click()
                 await page.set_viewport_size({"width": 390, "height": 844})
                 await page.screenshot(path=str(artifacts / "listener-mobile.png"), full_page=True)
                 assert await page.evaluate("document.documentElement.scrollWidth <= innerWidth")
-                print("Browser: 30-second silence rearm and mobile layout passed", flush=True)
+                await page.get_by_role("button", name="Tools & activity", exact=True).click()
+                assert await page.locator("#tools-panel").is_visible()
+                assert await page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+                await page.screenshot(
+                    path=str(artifacts / "listener-tools-mobile.png"), full_page=True
+                )
+                await page.get_by_role("button", name="Split view", exact=True).click()
+                assert await page.locator("#listener-panel").is_visible()
+                assert await page.locator("#tools-panel").is_visible()
+                assert await page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+                print(
+                    "Browser: live activity, view switching, silence rearm "
+                    "and mobile layout passed",
+                    flush=True,
+                )
 
                 # Denied access must be actionable and must not create a provider session.
                 await page.evaluate(
@@ -139,6 +184,16 @@ async def main():
                 await page.get_by_role("button", name="Enable listener").click()
                 await wait_browser(page, "document.querySelector('#orb').dataset.state === 'error'")
                 assert "Microphone access was denied" in await page.locator("#error").inner_text()
+                assert (
+                    "Microphone access was denied"
+                    in await page.locator("#activity-log").inner_text()
+                )
+                assert await page.locator("#activity-status").inner_text() == "Needs attention"
+                await page.reload()
+                await wait_browser(page, "!document.querySelector('#toggle').disabled")
+                assert await page.locator("#listener-panel").is_visible()
+                assert not await page.locator("#tools-panel").is_visible()
+                assert await page.locator("#activity-log li").count() == 0
                 assert not app.state.registry.sockets
                 assert not errors, errors
                 print(

@@ -1,4 +1,5 @@
 import { LevelTrigger, decodePcm } from "./audio.js";
+import { addActivity, showActivityPhase } from "./activity.js";
 
 const $ = (id) => document.getElementById(id);
 const trigger = new LevelTrigger();
@@ -56,7 +57,9 @@ const states = {
 };
 function setPhase(next) {
   if (phase === next && $("orb").dataset.state === next) return;
+  const previous = phase;
   phase = next;
+  showActivityPhase(next, previous);
   $("orb").dataset.state = next;
   const [label, title, detail] = states[next];
   $("mode-label").textContent = label;
@@ -80,11 +83,15 @@ function clearPlayback() {
   sources.clear();
   playbackUntil = 0;
 }
-function closeSession(rearm = true) {
+function closeSession(
+  rearm = true,
+  reason = "The voice connection has ended.",
+) {
   clearTimeout(startupTimer);
   const old = socket;
   socket = null;
   if (old) {
+    addActivity("Conversation ended", reason);
     if (old.readyState === WebSocket.OPEN)
       old.send(JSON.stringify({ event: "stop" }));
     old.close();
@@ -104,7 +111,7 @@ async function stop() {
   enabled = false;
   preparing = false;
   generation++;
-  closeSession(false);
+  closeSession(false, "The listener was paused.");
   if (capture) {
     capture.port.onmessage = null;
     capture.disconnect();
@@ -136,6 +143,7 @@ async function fail(message) {
   $("error").textContent = message;
   $("error").hidden = false;
   setPhase("error");
+  addActivity("Something needs attention", message, "error");
 }
 function pump() {
   if (!socket || socket.readyState !== WebSocket.OPEN || phase === "connecting")
@@ -230,6 +238,10 @@ function startSession() {
       pump();
     } else if (event.event === "clear") {
       clearPlayback();
+      addActivity(
+        "Reply interrupted",
+        "Playback cleared so the agent can listen.",
+      );
       setPhase("listening");
     } else if (event.event === "thinking") {
       setPhase("thinking");
@@ -291,11 +303,18 @@ function onFrame({ pcm, rms }) {
   const seconds = Math.floor((now - startedAt) / 1000);
   $("session-time").textContent =
     `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
-  if (
-    phase !== "connecting" &&
-    (now - lastActivity > 30000 || seconds >= maxSessionSeconds - 1)
-  )
-    closeSession();
+  if (phase !== "connecting") {
+    if (seconds >= maxSessionSeconds - 1)
+      closeSession(
+        true,
+        "Session limit reached. Waiting for the next conversation.",
+      );
+    else if (now - lastActivity > 30000)
+      closeSession(
+        true,
+        "30 seconds of quiet. Waiting for the next conversation.",
+      );
+  }
 }
 async function start() {
   if (!configured || enabled || preparing || stopping) return;
@@ -372,7 +391,9 @@ $("toggle").addEventListener("click", () => {
   if (enabled) void stop();
   else void start();
 });
-$("end-session").addEventListener("click", () => closeSession());
+$("end-session").addEventListener("click", () =>
+  closeSession(true, "Ended by you. The listener is waiting for sound."),
+);
 $("sensitivity").addEventListener("input", (event) => {
   trigger.thresholdDb = Number(event.target.value);
   trigger.reset();

@@ -31,6 +31,17 @@ computer awake during the conversation.
   This also happens automatically after 30 seconds of silence or the session limit.
 - **Pause listener** ends the session, stops playback, and releases the microphone.
 
+The workspace opens in **Split view** on a laptop: the listener on the left and
+**Tools & activity** on the right. Switch to either panel on its own without
+interrupting the microphone or conversation. On small screens, the listener is
+shown first; use the view buttons to switch panels or show both vertically.
+
+The activity panel shows the current microphone, agent and speaker states, plus
+timestamped connection, reply, interruption, end and error events. It keeps the
+latest 60 events in page memory; **Clear activity** clears this display without
+ending the conversation. Reloading the page clears the history. No external tools
+are currently configured; the tools section is a placeholder for future integrations.
+
 The trigger detects sound levels, not phone call status. Ringing or music can
 also activate it. Adjust the threshold and volume to suit your setup. The
 requested echo cancellation depends on your browser and device; test with a second phone.
@@ -86,4 +97,5 @@ uv run --with playwright python tests/browser_listener.py
 
 Tests use synthetic audio and require no API keys. The browser test covers
 automatic activation, playback, interruptions, pausing, returning to listening
-after silence, and denied microphone access.
+after silence, denied microphone access, live activity, and switching workspace
+views while a conversation is active.

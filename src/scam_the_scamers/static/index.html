@@ -20,76 +20,188 @@
     <main>
       <div class="intro">
         <p class="eyebrow">A LISTENING EAR. A VOICE BY YOUR SIDE.</p>
-        <h1>Right here.<br />When someone speaks.</h1>
+        <h1>Listen. See what happens.</h1>
         <p>
-          Phone on speaker. Laptop beside it.<br />Your assistant listens and
-          speaks for you.
+          Your voice agent on one side. Every step of the conversation on the
+          other.
         </p>
       </div>
-      <section class="listener-card" aria-label="Voice assistant">
-        <div class="card-top">
-          <span
-            ><i id="status-dot"></i
-            ><span id="mode-label">READY TO LISTEN</span></span
-          ><span id="session-time">LOCAL / 01</span>
-        </div>
-        <div id="orb" class="orb" data-state="off" aria-hidden="true">
-          <div class="orbit orbit-one"></div>
-          <div class="orbit orbit-two"></div>
-          <div class="orb-core">
-            <div class="wave"><b></b><b></b><b></b><b></b><b></b></div>
-          </div>
-        </div>
-        <div class="state-copy" aria-live="polite" role="status">
-          <h2 id="status-title">Switch it on.<br />Then just speak.</h2>
-          <p id="status-detail">
-            Enable your microphone to get the listener ready.
-          </p>
-        </div>
-        <button id="toggle" class="primary" disabled>
-          <span id="toggle-icon" aria-hidden="true">◉</span
-          ><span id="toggle-label">Getting ready …</span>
-        </button>
-        <button id="end-session" class="text-button" hidden>
-          End conversation · keep listening
-        </button>
-        <p id="error" class="error" role="alert" hidden></p>
-        <div class="meter-row">
-          <span>MICROPHONE</span>
-          <div
-            class="meter"
-            role="meter"
-            aria-label="Microphone level"
-            aria-valuemin="-70"
-            aria-valuemax="0"
-            aria-valuenow="-70"
+      <div class="workspace-toolbar">
+        <span class="workspace-label">YOUR WORKSPACE</span>
+        <div class="view-switch" role="group" aria-label="Workspace view">
+          <button
+            type="button"
+            data-view="split"
+            aria-pressed="true"
+            aria-controls="listener-panel tools-panel"
           >
-            <div id="level"></div>
-            <i id="threshold-line"></i>
+            Split view
+          </button>
+          <button
+            type="button"
+            data-view="listener"
+            aria-pressed="false"
+            aria-controls="listener-panel"
+          >
+            Listener
+          </button>
+          <button
+            type="button"
+            data-view="tools"
+            aria-pressed="false"
+            aria-controls="tools-panel"
+          >
+            Tools &amp; activity
+          </button>
+        </div>
+      </div>
+      <div id="workspace" class="workspace" data-view="split">
+        <div id="listener-panel" aria-label="Listener workspace">
+          <div class="panel-heading">
+            <span>01 / LISTENER</span><span>LIVE AUDIO</span>
           </div>
-          <span id="level-value">— dB</span>
+          <section class="listener-card" aria-label="Voice assistant">
+            <div class="card-top">
+              <span
+                ><i id="status-dot"></i
+                ><span id="mode-label">READY TO LISTEN</span></span
+              ><span id="session-time">LOCAL / 01</span>
+            </div>
+            <div id="orb" class="orb" data-state="off" aria-hidden="true">
+              <div class="orbit orbit-one"></div>
+              <div class="orbit orbit-two"></div>
+              <div class="orb-core">
+                <div class="wave"><b></b><b></b><b></b><b></b><b></b></div>
+              </div>
+            </div>
+            <div class="state-copy" aria-live="polite" role="status">
+              <h2 id="status-title">Switch it on.<br />Then just speak.</h2>
+              <p id="status-detail">
+                Enable your microphone to get the listener ready.
+              </p>
+            </div>
+            <button id="toggle" class="primary" disabled>
+              <span id="toggle-icon" aria-hidden="true">◉</span
+              ><span id="toggle-label">Getting ready …</span>
+            </button>
+            <button id="end-session" class="text-button" hidden>
+              End conversation · keep listening
+            </button>
+            <p id="error" class="error" role="alert" hidden></p>
+            <div class="meter-row">
+              <span>MICROPHONE</span>
+              <div
+                class="meter"
+                role="meter"
+                aria-label="Microphone level"
+                aria-valuemin="-70"
+                aria-valuemax="0"
+                aria-valuenow="-70"
+              >
+                <div id="level"></div>
+                <i id="threshold-line"></i>
+              </div>
+              <span id="level-value">— dB</span>
+            </div>
+          </section>
+          <section class="settings" aria-label="Listener settings">
+            <div>
+              <label for="sensitivity">When should the agent start?</label>
+              <p>
+                Automatically, when the sound briefly exceeds the threshold.
+              </p>
+            </div>
+            <div class="slider-wrap">
+              <input
+                id="sensitivity"
+                type="range"
+                min="-55"
+                max="-20"
+                value="-38"
+                step="1"
+                aria-describedby="sensitivity-value"
+              /><output id="sensitivity-value" for="sensitivity">−38 dB</output>
+              <div class="range-labels">
+                <span>Quiet voices</span><span>Loud voices</span>
+              </div>
+            </div>
+          </section>
         </div>
-      </section>
-      <section class="settings" aria-label="Listener settings">
-        <div>
-          <label for="sensitivity">When should the agent start?</label>
-          <p>Automatically, when the sound briefly exceeds the threshold.</p>
-        </div>
-        <div class="slider-wrap">
-          <input
-            id="sensitivity"
-            type="range"
-            min="-55"
-            max="-20"
-            value="-38"
-            step="1"
-            aria-describedby="sensitivity-value"
-          /><output id="sensitivity-value" for="sensitivity">−38 dB</output>
-          <div class="range-labels">
-            <span>Quiet voices</span><span>Loud voices</span>
+        <section id="tools-panel" aria-labelledby="tools-title">
+          <div class="panel-heading">
+            <span>02 / TOOLS &amp; ACTIVITY</span><span>LIVE VISIBILITY</span>
           </div>
-        </div>
-      </section>
+          <div class="activity-card">
+            <div class="activity-heading">
+              <div>
+                <p class="eyebrow">BEHIND THE CONVERSATION</p>
+                <h2 id="tools-title">Tools &amp; activity</h2>
+              </div>
+              <span id="activity-status" class="activity-status" role="status"
+                >Standby</span
+              >
+            </div>
+            <div class="pipeline" aria-label="Current audio status">
+              <div id="microphone-stage" data-active="false">
+                <span class="stage-number">01</span>
+                <h3>Microphone</h3>
+                <p id="microphone-status">Off</p>
+              </div>
+              <div id="agent-stage" data-active="false">
+                <span class="stage-number">02</span>
+                <h3>Voice agent</h3>
+                <p id="agent-status">Disconnected</p>
+              </div>
+              <div id="speaker-stage" data-active="false">
+                <span class="stage-number">03</span>
+                <h3>Speaker</h3>
+                <p id="speaker-status">Quiet</p>
+              </div>
+            </div>
+            <div class="tools-section">
+              <div class="section-heading">
+                <h3>Connected tools</h3>
+                <span class="count-badge">0</span>
+              </div>
+              <div class="tools-empty">
+                <span class="tools-symbol" aria-hidden="true">⌘</span>
+                <div>
+                  <strong>No tools connected yet</strong>
+                  <p>
+                    When tools are connected, this space will show their calls
+                    and results.
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div class="activity-section">
+              <div class="section-heading">
+                <h3>Live activity</h3>
+                <button
+                  id="clear-activity"
+                  class="clear-button"
+                  type="button"
+                  disabled
+                >
+                  Clear activity
+                </button>
+              </div>
+              <p id="activity-empty" class="activity-empty">
+                Enable the listener to see the conversation unfold here.
+              </p>
+              <ol
+                id="activity-log"
+                class="activity-log"
+                aria-label="Recent activity, newest first"
+              ></ol>
+              <p id="activity-announcement" class="sr-only" role="status"></p>
+            </div>
+            <p class="activity-note">
+              Latest 60 events · kept on this page only
+            </p>
+          </div>
+        </section>
+      </div>
       <div class="steps">
         <div>
           <span>01</span>
