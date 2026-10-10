@@ -22,6 +22,13 @@ contracts intact. Hook trust, GitHub app access and Trails enablement must be
 verified, not assumed from installed files. Follow higher-priority tool guidance
 when it differs from the generated guide below.
 
+Before relying on Brain, check freshness. On a clean checkout, refresh after new
+commits or checkpoints with `entire brain refresh --agent none --raw`. With
+Entire CLI 0.11.4 and Brain 0.1.0, compact Codex transcripts yielded zero
+searchable exchanges; raw export restored conversation retrieval. Preserve this
+flag until a version change is verified. Read-only `brief` and `query` commands
+do not keep the index fresh. No automatic Brain watcher is configured here.
+
 <!-- entire-agent:begin -->
 Read .entire/agent-guide.md for this repository's workflow, source inspection, and verification guidance.
 @.entire/agent-guide.md

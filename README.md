@@ -171,15 +171,41 @@ the event guide. From a clean, committed checkout:
 entire graph init-agents --repo .
 entire brain setup --agent none --no-backfill --no-daemon
 entire brain init-agents
+entire brain refresh --agent none --raw
 entire brain brief "Understand the local listener and its constraints" --json
 entire graph search --repo . --profile full --query "microphone session cleanup"
 ```
 
 Brain is initialized without background model jobs or a machine-wide daemon.
-Refresh it with `entire brain refresh --agent none` after new checkpoints or
+Refresh it with `entire brain refresh --agent none --raw` after new checkpoints or
 important commits. Record lasting decisions with `entire brain remember` and an
 explicit `--path`. Re-run `entire brain setup` after the generated instruction
-files are committed if it reports a dirty-worktree indexing error.
+files are committed if it reports a dirty-worktree indexing error, then run the
+raw refresh above.
+
+With Entire CLI 0.11.4 and Brain 0.1.0, the default compact Codex export produced
+zero searchable conversation exchanges in this repository. The supported `--raw`
+export restored retrieval from the original captured transcript. It changes the
+local Brain index, not the checkpoint stored in Git. Keep this flag during
+refreshes until the installed versions are verified to handle compact records.
+The default watcher is not enabled because its refresh path uses compact export.
+Automatic fact extraction and model-backed background jobs are also not enabled;
+the working memory sources are captured history, code, docs, and authored facts.
+
+At the beginning of a substantial task, verify capture with
+`entire session current`, check `entire brain status`, refresh if stale, then use
+`entire brain brief "<task>" --json`. To recover a previous conversation directly:
+
+```bash
+entire brain query "no-daemon" --source conversation --limit 3 --json
+```
+
+Use a relevant Graph lookup for code structure and verify its source pointers.
+After a change, run the appropriate checks, commit and push, verify its checkpoint,
+then refresh Brain so the next task can retrieve it. This refresh is deterministic
+and launches no additional coding agent. `entire graph stats --repo .` currently
+looks for Claude Code transcripts; a missing report in this Codex workflow is not
+evidence of token savings. Graft estimates belong to a separate tool.
 
 Checkpoint metadata is pushed alongside development work. Built-in secret
 redaction remains enabled, with email and phone-number redaction added. Keep
