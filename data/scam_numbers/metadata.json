@@ -1,0 +1,22 @@
+{
+  "generated_at": "2026-10-10T12:04:34.757555+00:00",
+  "total_unique_numbers": 73491,
+  "e164_txt_file": "data/scam_numbers/scam_numbers_e164.txt",
+  "sqlite_db_file": "data/scam_numbers/scam_numbers.db",
+  "sources": {
+    "shalom_karr_ai_blocklist": {
+      "total_lines": 44192,
+      "valid_unique_added": 44191,
+      "invalid_or_skipped": 1,
+      "url": "https://raw.githubusercontent.com/Shalom-Karr/AI-Number-Blocklist/main/blacklist.txt",
+      "description": "Community blocklist of AI robocallers & scammers in E.164 format"
+    },
+    "nathanu98_scammer_numbers": {
+      "total_lines": 35926,
+      "valid_unique_added": 29300,
+      "invalid_or_skipped": 0,
+      "url": "https://raw.githubusercontent.com/nathanu98/ScammerPhoneNumbers/main/ScammerNumbers.txt",
+      "description": "Scammer phone numbers collected from scam databases (US NANP format)"
+    }
+  }
+}

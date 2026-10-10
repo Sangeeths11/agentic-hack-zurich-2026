@@ -5,3 +5,13 @@ __pycache__/
 .tools/
 *.log
 .DS_Store
+.env.*
+!.env.example
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+dist/
+artifacts/
+
+# graft's local graph cache — regenerable, not committed (run `graft build`).
+/graft/

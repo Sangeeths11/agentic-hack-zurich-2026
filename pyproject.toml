@@ -1,24 +1,56 @@
 [project]
-name = "familyshield"
-version = "0.1.0"
-description = "Family Shield — Twilio call-screening foundation"
-requires-python = ">=3.11"
+name = "scam-the-scamers"
+version = "0.3.0"
+description = "Local microphone listener with Gradbot and Gradium voice responses"
+requires-python = ">=3.12,<3.13"
 dependencies = [
-    "fastapi>=0.115",
-    "uvicorn[standard]>=0.30",
-    "python-dotenv>=1.0",
-    "python-multipart>=0.0.9",
-    "twilio>=9.0",
+    "fastapi>=0.115,<1",
+    "anyio>=4,<5",
+    "uvicorn[standard]>=0.30,<1",
+    "pydantic-settings>=2.6,<3",
+    "gradbot==0.1.9",
 ]
 
 [dependency-groups]
 dev = [
-    "httpx>=0.27",
+    "httpx>=0.28,<1",
+    "pytest>=8,<10",
+    "pytest-asyncio>=0.24,<2",
+    "ruff>=0.11,<1",
+    "mypy>=1.15,<2",
 ]
+
+[project.scripts]
+scam-the-scamers = "scam_the_scamers.cli:main"
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/familyshield"]
+packages = ["src/scam_the_scamers"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/src/**", "/tests/**", "/scripts/**", "/.github/**",
+    "/README.md", "/pyproject.toml", "/uv.lock", "/.python-version",
+    "/.env.example", "/.gitignore",
+]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "ASYNC"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+filterwarnings = ["ignore:'audioop' is deprecated:DeprecationWarning"]
+
+[tool.mypy]
+python_version = "3.12"
+check_untyped_defs = true
+ignore_missing_imports = true
+plugins = ["pydantic.mypy"]
