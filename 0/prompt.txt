@@ -1,0 +1,5 @@
+Prüfe mit entire session current, ob Entire diese Sitzung erfasst.
+
+---
+
+Ergänze die README auf Englisch um die gerade gelösten Startprobleme: codex --no-daemon bei inkompatiblen Hintergrundserver-Einstellungen und die Freigabe der Entire-Hooks. Prüfe den Diff, committe und pushe auf setup/entire-hackathon. Prüfe danach mit entire checkpoint list und entire checkpoint explain HEAD, ob der Commit mit der Sitzung verknüpft wurde.
