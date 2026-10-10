@@ -115,6 +115,9 @@ async def test_whatsapp_independent_flags_and_unsent_tiers_coalesce(kind):
     [
         (ProviderError("callmebot", "credentials_rejected"), "error"),
         (ProviderError("callmebot", "request_failed", retryable=True), "error"),
+        (ProviderError("callmebot", "recipient_rejected", http_status=201), "error"),
+        (ProviderError("callmebot", "rate_limited", http_status=429), "error"),
+        (ProviderError("callmebot", "message_rejected", http_status=201), "error"),
         (ProviderError("callmebot", "transport_error"), "unknown"),
         (ProviderError("callmebot", "acceptance_unconfirmed"), "unknown"),
         (TimeoutError(), "unknown"),
@@ -141,6 +144,16 @@ async def test_whatsapp_failure_never_retries_ambiguous_send_or_announces_succes
         await manager.consider(assessment(75), CallerLookup("not_provided"))
         assert len(provider.calls) == 1 and not notices
         assert events[-1][1] == status
+        detail = events[-1][2]
+        if isinstance(failure, ProviderError) and failure.http_status is not None:
+            assert f"HTTP {failure.http_status}" in detail
+        if isinstance(failure, ProviderError) and failure.code == "recipient_rejected":
+            assert "guardian activated CallMeBot" in detail
+        if isinstance(failure, ProviderError) and failure.code == "rate_limited":
+            assert "rate or quota limit" in detail
+        if isinstance(failure, ProviderError) and failure.code == "message_rejected":
+            assert "message length or size" in detail
+        assert "fake-key" not in detail and settings.value("guardian_phone") not in detail
         assert manager.highest_accepted == 0
     finally:
         task.cancel()

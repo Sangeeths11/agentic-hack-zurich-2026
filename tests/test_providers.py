@@ -540,9 +540,15 @@ async def test_callmebot_encoded_get_acceptance_and_standalone_log_privacy(caplo
         (401, "API key fake-callmebot rejected", "credentials_rejected"),
         (403, "Not authorized", "credentials_rejected"),
         (302, "", "request_failed"),
-        (429, "Rate limit", "request_failed"),
+        (429, "Rate limit", "rate_limited"),
         (500, "Internal failure", "request_failed"),
-        (200, "<b>ERROR: API key invalid</b>", "acceptance_unconfirmed"),
+        (201, "ERROR: phone parameter is <b>missing</b>", "recipient_rejected"),
+        (201, "ERROR: APIKey fake-callmebot is invalid", "credentials_rejected"),
+        (201, "ERROR: text is too long", "message_rejected"),
+        (201, "ERROR: rate limit reached", "rate_limited"),
+        (201, "ERROR: private provider details", "provider_rejected"),
+        (200, "<b>ERROR: API key invalid</b>", "credentials_rejected"),
+        (200, "Text to send: ERROR: API key invalid", "acceptance_unconfirmed"),
         (200, "", "acceptance_unconfirmed"),
         (200, "Message sent", "acceptance_unconfirmed"),
         (200, "<b>Message queued.</b> ERROR", "acceptance_unconfirmed"),
@@ -567,8 +573,10 @@ async def test_callmebot_rejections_are_safe_bounded_and_never_retried(status, b
         )
     assert error.value.provider == "callmebot"
     assert error.value.code == code
+    assert error.value.http_status == status
     assert not error.value.retryable
     assert "fake-callmebot" not in str(error.value)
+    assert "private provider details" not in str(error.value)
     assert len(seen) == 1
 
 

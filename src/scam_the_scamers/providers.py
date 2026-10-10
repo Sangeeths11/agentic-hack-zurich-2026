@@ -3,6 +3,7 @@
 import asyncio
 import audioop
 import base64
+import html
 import json
 import logging
 import math
@@ -21,9 +22,17 @@ from .risk import SYSTEM_PROMPT, Assessment
 
 
 class ProviderError(RuntimeError):
-    def __init__(self, provider: str, code: str = "unavailable", *, retryable: bool = False):
+    def __init__(
+        self,
+        provider: str,
+        code: str = "unavailable",
+        *,
+        retryable: bool = False,
+        http_status: int | None = None,
+    ):
         super().__init__(f"{provider}: {code}")
         self.provider, self.code, self.retryable = provider, code, retryable
+        self.http_status = http_status
 
 
 @dataclass(frozen=True)
@@ -115,29 +124,51 @@ class CallMeBotWhatsApp:
                     async with client.stream(
                         "GET", "https://api.callmebot.com/whatsapp.php", params=params
                     ) as response:
-                        if response.status_code != 200:
-                            code = (
-                                "credentials_rejected"
-                                if response.status_code in {401, 403}
-                                else "request_failed"
-                            )
-                            raise ProviderError("callmebot", code)
+                        status_code = response.status_code
                         data = bytearray()
                         async for chunk in response.aiter_bytes():
                             if len(data) + len(chunk) > 8192:
-                                raise ProviderError("callmebot", "response_too_large")
+                                raise ProviderError(
+                                    "callmebot", "response_too_large", http_status=status_code
+                                )
                             data.extend(chunk)
             # The official linked Postman example returns HTML, including echoed
             # recipient/text. Only the terminal acknowledgement proves acceptance.
             # Never log the body; status 200 also occurs for provider rejections.
             raw = data.decode("utf-8", errors="replace")
+            # CallMeBot also uses HTTP 201 for errors. Recognize only a leading
+            # ERROR response, never phrases inside an echoed outgoing message.
+            # Publish fixed categories, not a body that may echo keys or contacts.
+            plain = html.unescape(re.sub(r"<[^>]*>", " ", raw)).strip().lower()
+            if plain.startswith("error:"):
+                reason = plain[:600]
+                if any(term in reason for term in ("too many", "rate limit", "quota")):
+                    code = "rate_limited"
+                elif any(term in reason for term in ("too long", "length", "size limit")):
+                    code = "message_rejected"
+                elif any(term in reason for term in ("apikey", "api key", "not authorized")):
+                    code = "credentials_rejected"
+                elif any(term in reason for term in ("phone", "number", "not activated")):
+                    code = "recipient_rejected"
+                else:
+                    code = "provider_rejected"
+                raise ProviderError("callmebot", code, http_status=status_code)
+            if status_code != 200:
+                code = (
+                    "credentials_rejected"
+                    if status_code in {401, 403}
+                    else "rate_limited"
+                    if status_code == 429
+                    else "request_failed"
+                )
+                raise ProviderError("callmebot", code, http_status=status_code)
             accepted = re.search(
                 r"<b>\s*Message queued\.\s*</b>\s*You will receive it in a few seconds\."
                 r"\s*(?:</(?:body|html)>\s*)*$",
                 raw,
             )
             if not accepted:
-                raise ProviderError("callmebot", "acceptance_unconfirmed")
+                raise ProviderError("callmebot", "acceptance_unconfirmed", http_status=status_code)
         except (httpx.HTTPError, TimeoutError):
             # A failed response may follow a successful send. CallMeBot has no
             # documented idempotency key, so ambiguous attempts are not retried.

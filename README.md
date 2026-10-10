@@ -18,8 +18,10 @@ six criterion scores; the server deterministically calculates the overall indica
 used for 50/75/90 alert tiers. The preserved local SQLite number lookup is integrated
 and tested. Resend alerts are implemented and mock-tested, but credentials, verified
 sender and fallback recipient remain unconfigured; no real email has been sent.
-CallMeBot WhatsApp guardian alerts are implemented and tested with fake transport;
-real WhatsApp acceptance and delivery have not been tested.
+CallMeBot WhatsApp guardian alerts are implemented and tested with fake transport.
+One explicitly approved diagnostic message received CallMeBot's queue acknowledgement,
+and the user confirmed delayed receipt on the guardian's handset. A full live screening
+alert was separately observed to fail; its delivery is not established by that test.
 
 Entire session capture, commit checkpoint synchronization, Graph and Brain have been
 verified. Six runner definitions are prepared, but hosted Trails/Runners remain
@@ -206,7 +208,10 @@ delivery unknown: resending could duplicate an already queued message. Only the
 documented queue acknowledgement displays **Guardian alert accepted at [time] — [alert
 level]**. The banner tracks WhatsApp and email separately and explains that provider
 acceptance is not confirmed delivery. The activity graph shows real request and
-failure states. Development tests and diagnostics never send real guardian messages.
+failure states, including HTTP status and fixed explanations for recognized key,
+recipient, size and rate-limit rejections. Provider error bodies are never displayed
+or logged because they may echo private data. Automated tests and diagnostics never
+send real guardian messages; a manual message test needs separate explicit approval.
 
 ## Fallback email via Resend
 

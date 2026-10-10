@@ -1,5 +1,32 @@
 # Live scam screening: evidence and demo
 
+## Investigating missing WhatsApp alerts
+
+On 2026-10-10 the user reported a high alert without a received WhatsApp message.
+The current browser activity established an actual critical score of 100 and a tier-90
+CallMeBot send attempt at 17:35:27, followed by an error. The configured threshold of
+80 did not block this attempt. The old handler discarded the HTTP status and body,
+so the precise reason for that historical failure cannot be recovered.
+
+Unauthenticated connectivity probes reached the API without supplying a recipient,
+key or message. A missing-parameter response used HTTP 201 with a leading `ERROR:`.
+The user then explicitly approved exactly one diagnostic message. That single request
+returned HTTP 200 and CallMeBot's terminal queue acknowledgement. The user initially
+reported no message, then confirmed that the guardian received it after a delay.
+No retry or second diagnostic was sent. This establishes user-confirmed delivery of
+the short diagnostic, not acceptance or delivery of the earlier full alert.
+
+The provider adapter now retains HTTP status and maps only leading error responses
+to fixed categories. The activity detail distinguishes recipient/key, message-size,
+rate-limit, unexpected HTTP and ambiguous transport failures, without displaying
+provider bodies, keys, numbers or message text. Echoed outgoing text is not treated
+as a provider error. Retry suppression and acceptance validation remain intact.
+
+Validation: 283 Python tests, 22 JavaScript tests, Ruff lint/format, mypy and both
+build artifacts passed. The local server was restarted with the same personal
+settings handed over in memory; no profile was written to storage or reparsed by
+a provider. No audio or browser implementation changed in this follow-up.
+
 ## Resumed personalized guardian screening
 
 Continued the interrupted working tree on `feat/personalized-screening` from

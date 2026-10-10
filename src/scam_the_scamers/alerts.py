@@ -434,10 +434,27 @@ class WhatsAppAlertManager:
                 "acceptance_unconfirmed",
                 "response_too_large",
             }
+            code = exc.code if isinstance(exc, ProviderError) else "transport_error"
+            reason = {
+                "credentials_rejected": "Check guardian activation and the matching API key.",
+                "recipient_rejected": "Check the guardian activated CallMeBot for this number.",
+                "rate_limited": "CallMeBot reported a rate or quota limit.",
+                "message_rejected": "CallMeBot rejected the message length or size.",
+                "provider_rejected": "CallMeBot explicitly rejected the request.",
+                "request_failed": "CallMeBot returned an unexpected HTTP response.",
+                "transport_error": "Request timed out or connection failed; delivery is unknown.",
+                "acceptance_unconfirmed": "CallMeBot did not confirm queue acceptance.",
+                "response_too_large": "Provider response too large; delivery is unknown.",
+            }.get(code, "Check the guardian configuration and CallMeBot service.")
+            http = (
+                f" HTTP {exc.http_status}."
+                if isinstance(exc, ProviderError) and exc.http_status is not None
+                else ""
+            )
             await self.emit(
                 "callmebot",
                 "unknown" if uncertain else "error",
-                f"Tier {level} WhatsApp alert not confirmed. "
+                f"Tier {level} WhatsApp alert not confirmed.{http} {reason} "
                 "No automatic retry; check with your contact.",
             )
         else:
