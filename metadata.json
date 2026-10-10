@@ -1,0 +1,52 @@
+{
+  "cli_version": "0.11.4",
+  "checkpoint_id": "01M4K3N87SKMGMPAQNFTKP6QXD",
+  "strategy": "manual-commit",
+  "branch": "feat/whatsapp-guardian-alerts",
+  "checkpoints_count": 1,
+  "files_touched": [
+    ".env.example",
+    "AGENTS.md",
+    "README.md",
+    "docs/live-scam-screening-evidence.md",
+    "docs/live-scam-screening-task.md",
+    "src/scam_the_scamers/agent.py",
+    "src/scam_the_scamers/alerts.py",
+    "src/scam_the_scamers/bridge.py",
+    "src/scam_the_scamers/cli.py",
+    "src/scam_the_scamers/config.py",
+    "src/scam_the_scamers/main.py",
+    "src/scam_the_scamers/providers.py",
+    "src/scam_the_scamers/static/activity.js",
+    "src/scam_the_scamers/static/index.html",
+    "src/scam_the_scamers/static/listener.css",
+    "src/scam_the_scamers/static/listener.js",
+    "src/scam_the_scamers/static/screening.js",
+    "tests/browser_listener.py",
+    "tests/live_browser_listener.py",
+    "tests/support.py",
+    "tests/test_agent.py",
+    "tests/test_browser_audio.mjs",
+    "tests/test_cli.py",
+    "tests/test_listener.py",
+    "tests/test_providers.py",
+    "tests/test_whatsapp_alerts.py"
+  ],
+  "sessions": [
+    {
+      "metadata": "/0/metadata.json",
+      "transcript": "/0/full.jsonl",
+      "compact_transcript": "/0/transcript.jsonl",
+      "content_hash": "/0/content_hash.txt",
+      "prompt": "/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 114408,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 5913856,
+    "output_tokens": 19266,
+    "api_call_count": 65,
+    "subagent_tokens_complete": false
+  }
+}
