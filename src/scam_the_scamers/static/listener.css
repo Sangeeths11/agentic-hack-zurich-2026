@@ -828,9 +828,46 @@ footer > span:last-child {
 .risk-panel[data-risk="critical"] { border-color: #861b34; }
 .risk-panel[data-risk="red"] { border-color: #bf5b4e; }
 .risk-panel[data-risk="amber"] { border-color: #c29736; }
+.risk-panel[data-risk="amber"] { background: #fff0ce; }
+.risk-panel[data-risk="red"] { background: #ffe4dd; }
+.risk-panel[data-risk="critical"] { background: #ffd5d8; }
+.risk-warning { font-size: 13px; font-weight: 650; line-height: 1.6; color: #7d291c; }
+.risk-panel[data-risk="amber"] .risk-warning { color: #754906; }
+.risk-panel { transition: background .2s, border-color .2s; }
+.risk-panel[data-risk="amber"] .criterion { border-color: #ddc996; }
+.risk-panel[data-risk="red"] .criterion, .risk-panel[data-risk="critical"] .criterion { border-color: #dfb9b1; }
+.number-input { display: flex; gap: 8px; align-items: stretch; margin-top: 8px; }
+.number-input input { margin: 0; min-width: 0; }
+.number-input button { flex-shrink: 0; padding: 8px 12px; border: 1px solid #b7c5aa; border-radius: 8px; background: #edf2e6; color: #304f33; font-size: 11px; }
+.guardian-banner { border: 1px solid #75956b; border-radius: 12px; padding: 14px 16px; margin: 0 auto 22px; max-width: 1148px; width: calc(100% - 48px); background: #ebf3e6; }
+.guardian-banner strong { font-size: 12px; line-height: 1.6; }
+.guardian-banner p { color: #51644c; font-size: 10px; line-height: 1.5; margin: 6px 0 0; }
+.caller-check-status { padding: 10px 12px; background: #f0f2e8; border-radius: 8px; }
+.caller-check-status[data-matched="true"] { background: #ffe4dd; color: #842c20; border: 1px solid #d8a193; }
+.graph-legend { margin-left: auto; color: #58714d; font-size: 9px; white-space: nowrap; }
+.graph-legend i { display: inline-block; height: 6px; width: 6px; border-radius: 50%; margin-right: 5px; background: #4d8248; }
+.graph-description { color: #6c7760; font-size: 10px; line-height: 1.6; margin: -5px 0 16px; }
+.flow-graph { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-rows: repeat(3, 104px); gap: 24px 6.666%; position: relative; isolation: isolate; }
+.flow-lines { position: absolute; inset: 0; width: 100%; height: 100%; z-index: -1; overflow: visible; }
+.flow-lines > path { fill: none; stroke: #c8d2bf; stroke-width: 1.6; marker-end: url(#arrow); }
+.flow-lines marker path { fill: #91a881; }
+.flow-lines > path[data-active="true"] { stroke: #4c8248; stroke-width: 2.8; }
+.flow-node { border: 1px solid #dce3d3; background: #f6f7f1; border-radius: 11px; padding: 11px 10px; min-width: 0; transition: background .15s, border-color .15s; }
+.flow-node[data-active="true"] { border-color: #7fa86b; background: #e7f2de; box-shadow: 0 0 0 2px #d8e9cb70; }
+.flow-node[data-status="error"], .flow-node[data-status="unavailable"] { border-color: #ca9a87; background: #fff0e8; }
+.flow-node[data-status="matched"] { border-color: #cd8e80; background: #ffe5de; }
+.node-kind { display: block; color: #6d7d63; font: 7px ui-monospace, monospace; letter-spacing: .4px; }
+.flow-node h3 { margin: 10px 0 6px; font-size: 11px; line-height: 1.2; font-weight: 650; }
+.flow-node p { margin: 0; color: #626f59; font-size: 10px; line-height: 1.4; overflow-wrap: anywhere; }
+.transcript-section { border-top: 1px solid #e8ecdf; margin-top: 22px; padding-top: 20px; }
+.transcript-section .count-badge { margin-left: auto; }
+.transcript-text { background: #f4f5ee; border: 1px solid #e0e6d7; border-radius: 10px; padding: 14px; min-height: 90px; max-height: 240px; overflow-y: auto; font-size: 12px; line-height: 1.8; white-space: pre-wrap; overflow-wrap: anywhere; }
+.transcript-text:focus-visible { outline: 2px solid #689a64; outline-offset: 3px; }
+.transcript-empty { color: #76826b; font-size: 11px; line-height: 1.7; background: #f5f6ef; border: 1px dashed #d5dfcb; border-radius: 10px; padding: 20px 14px; }
 .tool-statuses { margin: 0; }
 .tool-statuses > div { display: flex; justify-content: space-between; gap: 12px; font-size: 11px; padding: 8px 0; }
 .tool-statuses dd { margin: 0; text-align: right; color: #65745d; }
 .tool-statuses dd[data-status="error"] { color: #a32922; }
 #warning-text { font-size: 13px; padding: 12px; background: #fff0ca; border-radius: 8px; }
 @media (max-width: 420px) { .settings { flex-wrap: wrap; } .risk-heading { align-items: start; } }
+@media (max-width: 420px) { .flow-node { padding: 10px 7px; } .flow-node h3 { font-size: 10px; } .node-kind { font-size: 6px; letter-spacing: 0; } .flow-node p { font-size: 9px; } }

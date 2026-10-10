@@ -1,5 +1,63 @@
 # Live scam screening: evidence and demo
 
+## Additive scoring and live visibility follow-up
+
+Implemented on `feat/live-screening-alerts` from `main` commit `c091487` on
+2026-10-10, with three sub-agents explicitly requested by the user. This section
+supersedes the older weighted-score behavior described in the historical evidence below.
+
+The lookup now runs independently before microphone activation and reports its result
+before Gradium opens during screening. Existing ordinary database records were already
+queryable; the missing visible warning and provider-startup dependency hid the result.
+Two preserved legacy entries were also incorrectly rejected by phone-length validation
+before the query. Exact stored matches now warn without modifying the dataset.
+
+Six finite, complete model scores are added and capped at 100 in the backend. Gemini's
+independent scam judgment and matched numbers can raise a high warning without inflating
+scores. Tests prove a total of 10 with a scam flag raises tier 75; absent warning text
+still never invokes TTS. The browser shows actual pipeline activity, the bounded
+accumulated transcript, full-panel warning colors and acceptance-only guardian banners.
+Lookup warnings are visible beside the input on mobile; guardian banners appear in
+every workspace view. Transcript text is rendered literally and cleared at session end.
+
+Executed checks:
+
+| Check | Result |
+| --- | --- |
+| `uv run ruff check src tests` | Passed |
+| `uv run ruff format --check src tests` | Passed, 23 files |
+| `uv run mypy src` | Passed, 12 source files |
+| `uv run pytest -q` | 152 passed; one upstream TestClient deprecation warning |
+| `node --test tests/test_browser_audio.mjs` | 18 passed |
+| `uv build` | Source distribution and wheel built |
+| Offline Chrome harness | 3 synthetic sessions, zero page errors; lookup, independent flags, live graph, transcript safety/clipping, fake guardian acceptance, mobile layout and audio cleanup |
+| `uv run scam-the-scamers doctor --live` | Gemini examples, Gradium TTS and nonempty STT passed; no email |
+| `uv run --with playwright python tests/live_browser_listener.py --live` | Passed with synthetic Gradium speech; 4 valid assessments, zero unavailable assessments, calculated total 100, warning playback scheduled in muted Chrome, pause cleanup passed, zero page errors |
+| Synthetic Gemini technical-support scam probe | Valid six-score response, `is_scam=true`, allowlisted warning; no email or audio services used |
+| Runner comparison excluding `prompt.template` | All six schemas/settings/output contracts preserved |
+| Restarted localhost health and lookup HTTP checks | Passed; an exact legacy database match returned before microphone/provider use |
+
+The live family-lunch diagnostic returned total 25 with no warning text; the synthetic
+family-emergency scam returned total 100 with an allowlisted warning. These are actual
+probe results, not a calibration study. Low-score scam override is established by fake
+provider tests, not by the live technical-support probe (which scored 100).
+No real email was sent; live browser settings forcibly disabled Resend. Guardian success
+and failure states use fake transport. Physical phone/speaker acoustics and inbox delivery
+remain unverified. The 12,000-character default context bound remains explicit: opening
+and recent speech are retained when middle context must be clipped.
+
+Entire doctor found Git hooks OK and Codex approval records present. The active session
+resolved to `01a1261b-5389-7422-b1e5-86a56453df2a` with this request. Brain was refreshed
+with `--agent none --raw` on the clean checkout before the task brief. A supported
+Graph `neighbors` query inspected the new alert method; the generated guide's older
+`query` subcommand remains unavailable. Entire's repository API reports both mirrors
+ready, and its web settings show GitHub synced. However, no Runners/Trails controls are
+exposed there and `entire trail create` still returns repository-not-found HTTP 404.
+No hosted Trail evaluation is claimed. Runner prompt context was updated for the
+accepted additive scoring contract, preserving all generated schemas and outputs.
+
+## Earlier implementation evidence
+
 Implemented on `feature/live-scam-screening`, based on clean `setup/entire-hackathon`
 commit `c2fcef8`. Accepted requirements: [work order](live-scam-screening-task.md).
 All evidence below was executed on 2026-10-10. No additional agents were spawned.

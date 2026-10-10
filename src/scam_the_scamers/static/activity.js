@@ -4,7 +4,7 @@ const stages = {
   armed: ["Listening", "Waiting for sound", "Quiet"],
   connecting: ["Listening", "Connecting", "Quiet"],
   listening: ["Listening", "Connected", "Quiet"],
-  thinking: ["Listening", "Assessing", "Quiet"],
+  thinking: ["Listening", "Connected", "Quiet"],
   speaking: ["Listening", "Connected", "Playing audio"],
   error: ["Off", "Disconnected", "Quiet"],
 };
@@ -46,10 +46,11 @@ export function showActivityPhase(next, previous) {
     $(`${name}-status`).textContent = labels[index];
     const active = [
       !["off", "error"].includes(next),
-      ["connecting", "listening", "thinking", "speaking"].includes(next),
+      ["listening", "thinking", "speaking"].includes(next),
       next === "speaking",
     ][index];
     $(`${name}-stage`).dataset.active = String(active);
+    setEdge(name === "agent" ? "backend" : name, active);
   });
   const live = !["off", "error"].includes(next);
   $("activity-status").textContent = live
@@ -99,9 +100,38 @@ viewButtons.forEach((button) => {
 setView(window.matchMedia("(max-width: 760px)").matches ? "listener" : "split");
 
 export function showTool(event) {
-  const labels = { stt: "Gradium STT", gemini: "Gemini", db: "Number database", tts: "Gradium TTS", resend: "Resend email" };
-  if (!labels[event.tool]) return;
-  $(`tool-${event.tool}`).textContent = event.status.replaceAll("_", " ");
-  $(`tool-${event.tool}`).dataset.status = event.status;
-  addActivity(`${labels[event.tool]} · ${event.status.replaceAll("_", " ")}`, event.detail, event.status === "error" ? "error" : "info");
+  const tool = event.tool === "db" ? "lookup" : event.tool;
+  const labels = { backend: "Backend", stt: "Gradium STT", gemini: "Gemini", lookup: "Number database", scoring: "Local scoring", tts: "Gradium TTS", resend: "Resend email" };
+  if (!labels[tool] || typeof event.status !== "string") return;
+  const status = $(tool === "backend" ? "agent-status" : `tool-${tool === "lookup" ? "db" : tool}`);
+  const node = $(tool === "backend" ? "agent-stage" : `node-${tool}`);
+  status.textContent = event.status.replaceAll("_", " ");
+  status.dataset.status = event.status;
+  node.dataset.status = event.status;
+  const active = ["connecting", "connected", "streaming", "assessing", "checking", "calculating", "synthesizing", "sending"].includes(event.status);
+  node.dataset.active = String(active);
+  setEdge(tool, active);
+  addActivity(`${labels[tool]} · ${status.textContent}`, typeof event.detail === "string" ? event.detail : "", event.status === "error" ? "error" : "info");
+}
+
+function setEdge(tool, active) {
+  document.querySelectorAll(`.flow-lines [data-to="${tool}"]`).forEach((edge) => {
+    edge.dataset.active = String(active);
+  });
+}
+
+export function resetTools(disconnected = false) {
+  for (const tool of ["lookup", "stt", "gemini", "scoring", "tts", "resend"]) {
+    const node = $(`node-${tool}`);
+    node.dataset.active = "false";
+    delete node.dataset.status;
+    setEdge(tool, false);
+    if (tool === "resend") continue; // Keep missing configuration visible.
+    const status = $(`tool-${tool === "lookup" ? "db" : tool}`);
+    delete status.dataset.status;
+    if (tool === "lookup") {
+      if (!disconnected) status.textContent = "Not checked";
+    }
+    else status.textContent = disconnected ? "Disconnected" : "Waiting";
+  }
 }

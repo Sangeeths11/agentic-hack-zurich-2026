@@ -144,9 +144,9 @@ async def main():
                     "Partial assessment failed"
                 )
                 assert float(overall) == assessments[-1]["overall"]
-                assert float(overall) >= settings.warning_threshold
+                assert float(overall) >= settings.warning_threshold or assessments[-1]["is_scam"]
                 assert all(0 <= value <= 100 for value in assessments[-1]["criteria"].values())
-                assert await page.get_by_text("CALCULATED OVERALL RISK", exact=True).is_visible()
+                assert await page.get_by_text("CALCULATED ADDITIVE TOTAL", exact=True).is_visible()
                 assert await page.get_by_text(
                     "All six Gemini evidence scores", exact=True
                 ).is_visible()

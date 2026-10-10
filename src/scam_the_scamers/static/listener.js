@@ -1,10 +1,13 @@
 import { LevelTrigger, decodePcm } from "./audio.js";
-import { addActivity, showActivityPhase, showTool } from "./activity.js";
+import { addActivity, showActivityPhase, showTool, resetTools } from "./activity.js";
 
-import { criteria, riskColor, validAssessment, PlaybackGuard } from "./screening.js";
+import { criteria, riskColor, validAssessment, assessmentColor, validGuardianAlert, PlaybackGuard } from "./screening.js";
 
 const guard = new PlaybackGuard();
 let revision = 0, finishing = false, warningPlaybackAllowed = false;
+let latestAssessment = null, callerMatched = false, transcriptRevision = 0, guardianLevel = 0;
+let lookupRequest = null, lookupSequence = 0;
+const TRANSCRIPT_LIMIT = 24000;
 const $ = (id) => document.getElementById(id);
 for (const [key, label] of Object.entries(criteria)) {
   const row = document.createElement("div"); row.className = "criterion"; row.id = `criterion-${key}`; row.dataset.risk = "unavailable";
@@ -111,6 +114,7 @@ function closeSession(
     old.close();
   }
   clearPlayback();
+  resetTranscript();
   pending = [];
   preRoll = [];
   trigger.reset();
@@ -118,7 +122,7 @@ function closeSession(
   $("session-time").textContent = "LOCAL / 01";
   if (old) {
     $("assessment-status").textContent = "Session ended. Last assessment is no longer live.";
-    for (const tool of ["stt", "gemini", "tts"]) $(`tool-${tool}`).textContent = "Disconnected";
+    resetTools(true);
   }
   if (rearm && enabled) setPhase("armed");
 }
@@ -152,6 +156,7 @@ async function stop() {
   document.documentElement.style.setProperty("--level", 0);
   $("level-value").textContent = "— dB";
   $("caller-number").disabled = false;
+  $("check-number").disabled = false;
   $("toggle-label").textContent = "Enable listener";
   $("toggle").disabled = !configured;
   stopping = false;
@@ -213,6 +218,11 @@ function startSession() {
   if (!enabled || socket) return;
   trigger.reset();
   revision = 0;
+  latestAssessment = null;
+  resetTranscript();
+  resetTools();
+  guardianLevel = 0;
+  $("guardian-banner").hidden = true;
   resetScores("Waiting for speech and a valid assessment.");
   $("warning-text").hidden = true;
   $("tool-tts").textContent = "No warning requested";
@@ -273,6 +283,12 @@ function startSession() {
       revision = event.revision;
       showScores(event);
       if (phase === "thinking") setPhase("listening");
+    } else if (event.event === "caller_lookup") {
+      showCaller(event.caller);
+    } else if (event.event === "transcript") {
+      showTranscript(event);
+    } else if (event.event === "guardian_alert") {
+      showGuardianAlert(event);
     } else if (event.event === "assessment_unavailable") {
       if (event.revision < revision) return;
       revision = event.revision;
@@ -364,6 +380,15 @@ function onFrame({ pcm, rms }) {
 async function start() {
   if (!configured || enabled || preparing || stopping) return;
   preparing = true;
+  if (lookupRequest) {
+    lookupRequest.abort();
+    lookupRequest = null;
+    lookupSequence++;
+    $("caller-check-status").textContent = "Preview lookup cancelled. Screening will check the supplied number.";
+    showTool({ tool: "lookup", status: "cancelled", detail: "Preview lookup cancelled; the screening session will check the supplied number." });
+  }
+  $("check-number").disabled = true;
+  $("check-number").textContent = "Check number";
   const attempt = ++generation;
   $("error").hidden = true;
   $("toggle").disabled = true;
@@ -416,6 +441,10 @@ async function start() {
     };
     enabled = true;
     $("caller-number").disabled = true;
+    $("check-number").disabled = true;
+    $("check-number").textContent = "Check number";
+    lookupRequest?.abort();
+    lookupSequence++;
     preparing = false;
     trigger.reset();
     cooldownUntil = 0;
@@ -460,7 +489,7 @@ try {
   maxSessionSeconds = config.max_session_seconds;
   $("caller-help").textContent = `Enter an international number (+country code), or a local number in ${config.caller_default_region}. Caller ID is not detected.`;
   $("fallback-status").textContent = config.email_status === "configured"
-    ? `Fallback: ${config.fallback_email}. Automatic alerts at 50, 75 and 90; actual delivery is not yet verified.`
+    ? `Fallback: ${config.fallback_email}. Automatic alerts at levels 50, 75 and 90; accepted alerts appear in a banner. Inbox delivery is unverified.`
     : `Fallback email: ${config.email_status.replaceAll("_", " ")}. Screening works without email alerts.`;
   $("tool-resend").textContent = config.email_status.replaceAll("_", " ");
   $("toggle").disabled = !configured;
@@ -494,9 +523,9 @@ $("cancel-warning").addEventListener("click", () => {
   if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ event: "cancel_warning" }));
 });
 function resetScores(message) {
+  latestAssessment = null;
   $("overall-score").textContent = "—";
-  $("risk-level").textContent = "Unavailable / waiting";
-  $("risk-panel").dataset.risk = "unavailable";
+  updateRisk();
   $("assessment-status").textContent = message;
   for (const key of Object.keys(criteria)) {
     $(`score-${key}`).textContent = "—";
@@ -504,17 +533,18 @@ function resetScores(message) {
   }
 }
 function showScores(event) {
+  latestAssessment = event;
   $("overall-score").textContent = `${event.overall} / 100`;
-  const color = riskColor(event.overall);
-  $("risk-panel").dataset.risk = color;
-  $("risk-level").textContent = { green: "Lower indicators", amber: "Caution", red: "High", critical: "Critical" }[color];
+  updateRisk();
   $("assessment-status").textContent = `Assessment ${event.revision} · ${event.context_truncated ? "Context limit reached; opening and recent speech retained." : "Based on accumulated speech. Mistakes are possible."}`;
   for (const key of Object.keys(criteria)) {
-    $(`score-${key}`).textContent = `${event.criteria[key]} / 100`;
+    $(`score-${key}`).textContent = `${Number(event.criteria[key].toFixed(1))} / 100`;
     $(`criterion-${key}`).dataset.risk = riskColor(event.criteria[key]);
   }
 }
 function showCaller(caller) {
+  if (!caller || typeof caller.status !== "string") return;
+  callerMatched = caller.status === "matched";
   const descriptions = {
     not_provided: "No caller number provided.", invalid: "Invalid number; lookup was not performed.",
     unavailable: "Number database unavailable. Caller risk is unknown.",
@@ -522,5 +552,107 @@ function showCaller(caller) {
     matched: `Listed by ${caller.source} (${caller.listed_at}). Listings may be stale and caller ID can be spoofed.`,
   };
   $("caller-result").textContent = descriptions[caller.status] || "Lookup unavailable.";
-  showTool({ tool: "db", status: caller.status, detail: $("caller-result").textContent });
+  $("caller-check-status").textContent = callerMatched
+    ? `Listed number — verify independently. ${$("caller-result").textContent}`
+    : $("caller-result").textContent;
+  $("caller-check-status").dataset.matched = String(callerMatched);
+  $("caller-check-status").hidden = false;
+  $("tool-db").textContent = caller.status.replaceAll("_", " ");
+  $("node-lookup").dataset.status = caller.status;
+  updateRisk();
 }
+
+function updateRisk() {
+  const color = assessmentColor(latestAssessment, callerMatched);
+  $("risk-panel").dataset.risk = color;
+  $("risk-level").textContent = { unavailable: "Unavailable / waiting", green: "Lower indicators", amber: "Caution", red: "High", critical: "Critical" }[color];
+  const reasons = [];
+  if (callerMatched) reasons.push("Listed number — verify independently.");
+  if (latestAssessment?.is_scam) reasons.push("Gemini flagged this conversation as a suspected scam.");
+  if (!reasons.length && ["amber", "red", "critical"].includes(color)) reasons.push("The conversation contains warning signs. Pause and verify independently.");
+  $("risk-warning").textContent = reasons.join(" ");
+  $("risk-warning").hidden = !reasons.length;
+}
+
+function resetTranscript() {
+  transcriptRevision = 0;
+  $("transcript-text").textContent = "";
+  $("transcript-text").hidden = true;
+  $("transcript-empty").hidden = false;
+  $("transcript-state").textContent = "Waiting";
+  $("transcript-note").textContent = "Kept in memory for this session. Cleared when screening ends.";
+}
+
+function showTranscript(event) {
+  if (!Number.isInteger(event.revision) || event.revision <= transcriptRevision || typeof event.text !== "string") return;
+  transcriptRevision = event.revision;
+  const clipped = event.text.length > TRANSCRIPT_LIMIT;
+  const text = clipped ? `${event.text.slice(0, 6000)}\n[…]\n${event.text.slice(-(TRANSCRIPT_LIMIT - 6005))}` : event.text;
+  const display = $("transcript-text");
+  const nearBottom = display.scrollHeight - display.scrollTop - display.clientHeight < 40;
+  display.textContent = text;
+  display.hidden = false;
+  $("transcript-empty").hidden = true;
+  $("transcript-state").textContent = `Live · ${event.revision}`;
+  $("transcript-note").textContent = event.context_truncated || clipped
+    ? "Context limit reached: opening and recent speech are retained; some middle speech is omitted. Cleared when screening ends."
+    : "Accumulated conversation · kept in memory for this session. Cleared when screening ends.";
+  if (nearBottom) display.scrollTop = display.scrollHeight;
+}
+
+function showGuardianAlert(event) {
+  if (!validGuardianAlert(event) || event.level <= guardianLevel) return;
+  guardianLevel = event.level;
+  const time = new Intl.DateTimeFormat("en", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }).format(new Date(event.accepted_at));
+  $("guardian-message").textContent = `Guardian alerted at ${time} — ${event.severity}`;
+  $("guardian-banner").dataset.level = String(event.level);
+  $("guardian-banner").hidden = false;
+}
+
+$("caller-number").addEventListener("input", () => {
+  lookupSequence++;
+  lookupRequest?.abort();
+  $("check-number").disabled = false;
+  $("check-number").textContent = "Check number";
+  showCaller({ status: "not_provided" });
+  $("caller-result").textContent = "Number changed. Check it again; caller risk is unknown.";
+  $("caller-check-status").textContent = $("caller-result").textContent;
+  $("node-lookup").dataset.active = "false";
+  document.querySelector('.flow-lines [data-to="lookup"]').dataset.active = "false";
+});
+$("check-number").addEventListener("click", async () => {
+  if (enabled) return;
+  const attempt = ++lookupSequence;
+  lookupRequest?.abort();
+  const request = new AbortController();
+  lookupRequest = request;
+  $("check-number").disabled = true;
+  $("check-number").textContent = "Checking…";
+  $("caller-check-status").textContent = "Checking the local number database…";
+  $("caller-check-status").hidden = false;
+  showTool({ tool: "lookup", status: "checking", detail: "Checking the supplied number in the local SQLite database." });
+  const timeout = setTimeout(() => request.abort(), 10000);
+  try {
+    const response = await fetch("/api/caller-lookup", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ caller_number: $("caller-number").value }), signal: request.signal,
+    });
+    if (!response.ok) throw new Error("lookup-failed");
+    const result = await response.json();
+    if (attempt !== lookupSequence) return;
+    if (!result.caller || typeof result.caller.status !== "string") throw new Error("lookup-invalid");
+    showCaller(result.caller);
+    showTool({ tool: "lookup", status: result.caller.status, detail: $("caller-result").textContent });
+  } catch {
+    if (attempt !== lookupSequence) return;
+    showCaller({ status: "unavailable" });
+    showTool({ tool: "lookup", status: "error", detail: "Number lookup unavailable. Caller risk is unknown." });
+  } finally {
+    clearTimeout(timeout);
+    if (attempt === lookupSequence) {
+      lookupRequest = null;
+      $("check-number").disabled = false;
+      $("check-number").textContent = "Check number";
+    }
+  }
+});

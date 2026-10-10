@@ -13,8 +13,19 @@ export function riskColor(score) {
 export function validAssessment(event) {
   return Number.isInteger(event.revision) && event.revision > 0 &&
     riskColor(event.overall) !== "unavailable" &&
+    typeof event.is_scam === "boolean" && [0, 50, 75, 90].includes(event.alert_level) &&
     event.criteria && Object.keys(event.criteria).length === 6 &&
     Object.keys(criteria).every((key) => riskColor(event.criteria[key]) !== "unavailable");
+}
+export function assessmentColor(event, matched = false) {
+  const level = Math.max(event?.overall ?? 0, event?.alert_level ?? 0, event?.is_scam ? 75 : 0, matched ? 75 : 0);
+  return !event && !matched ? "unavailable" : riskColor(level);
+}
+export function validGuardianAlert(event) {
+  return event.status === "accepted" &&
+    [50, 75, 90].includes(event.level) &&
+    event.severity === { 50: "Caution", 75: "High", 90: "Critical" }[event.level] &&
+    typeof event.accepted_at === "string" && Number.isFinite(Date.parse(event.accepted_at));
 }
 export class PlaybackGuard {
   constructor() { this.until = 0; }

@@ -32,16 +32,19 @@ scripts/setup.sh
 scripts/run_local.sh
 ```
 
-Open **http://localhost:8082**. Optionally enter the caller's phone number, check the
-fallback email status, click **Enable listener**, and allow microphone access.
+Open **http://localhost:8082**. Optionally enter the caller's phone number and click **Check number** for an immediate
+local lookup, check the fallback email status, then click **Enable listener**, and allow microphone access.
 Keep the tab open and computer awake. Sound above the adjustable threshold for
 180 ms starts screening; a bounded pre-roll preserves the start of speech.
 Ringing or music can trigger it. The app cannot detect call acceptance or caller ID.
 
 The responsive workspace offers **Split view**, **Listener** and **Tools & activity**.
 Switching views does not interrupt audio. Scores start as waiting, never invented zeroes.
-Actual Gradium STT, Gemini, SQLite lookup, Gradium TTS and Resend results/errors appear
-in the activity panel. The most recent 60 events stay only in page memory.
+A live pipeline graph highlights actual microphone, backend, SQLite, Gradium STT,
+Gemini, local scoring, Gradium TTS, playback and Resend activity. Streaming connections
+and individual requests have distinct states. The most recent 60 events stay only in
+page memory. The live transcript shows the same bounded accumulated context sent to
+Gemini; it is never written to browser storage or application logs.
 
 **End screening** flushes the last audio/text and returns to waiting. After 30 seconds
 of quiet the browser also finalizes the session. **Pause listener** immediately
@@ -52,36 +55,43 @@ cancels immediately during that grace period.
 
 ## Scores and warnings
 
-Criterion scores describe evidence strength: 0 absent, 25 ambiguous, 50 plausible,
-75 strong, 100 explicit. They are model judgments, not calibrated probabilities.
-Gemini returns all six criterion scores and optional warning text. All six model
-scores are displayed. The backend deterministically calculates the overall screening
-indicator using the weighted sum below, rounded to one decimal; the UI labels it
-**Calculated overall risk**. The model is not asked to return or validate that sum.
-This avoids losing valid evidence to model arithmetic errors. Malformed, incomplete
-or out-of-range criteria still show unavailable, without fabricating scores or speech.
-All overall colors, email tiers and spoken-warning eligibility use this calculated total.
+Criterion scores describe suspicious evidence in context: 0 absent, 25 ambiguous,
+50 plausible, 75 strong, 100 explicit. Ordinary family greetings, routine agreed
+payments and quoted/negated scam examples are not suspicious evidence by themselves.
+Gemini returns all six scores, an independent `is_scam` judgment and optional safe
+warning text. These judgments are not calibrated fraud probabilities.
 
-| Criterion | Example | Overall weight |
-| --- | --- | ---: |
-| Family-member claim | “I'm your daughter.” | 5% |
-| Emotional distress | “I've been arrested.” | 10% |
-| Urgency | “Within the hour.” | 20% |
-| Secrecy | “Don't tell Mum and Dad.” | 20% |
-| Financial request | “CHF 5,000 in cash.” | 25% |
-| Courier pickup | “Someone will collect the cash.” | 20% |
+The backend calculates **Calculated additive total** as
+`min(100, family_claim + emotional_distress + urgency + secrecy + financial_request + courier_pickup)`,
+rounded to one decimal. No averaging or weighting dilutes an isolated severe signal:
+urgency 80 and five zeroes gives 80; urgency 30 plus secrecy 25 gives 55. All six
+Gemini scores remain separately visible. Gemini never calculates or validates the sum.
+Malformed, incomplete or out-of-range criteria remain unavailable.
 
-A family claim by itself contributes at most **5/100**. Each criterion and the overall
-use green below 50, amber from 50, red from 75 and critical from 90. Higher values
-warrant caution and independent verification; they do not establish fraud. A criterion
-can have strong evidence without the whole call being suspicious. The rubric needs
-real-world calibration and may miss other scam patterns.
+| Criterion | Suspicious context example |
+| --- | --- |
+| Family-member claim | An unverifiable family identity used to demand help |
+| Emotional distress | An alleged arrest or accident used to pressure the listener |
+| Urgency | “Pay within the hour.” |
+| Secrecy | “Don't tell family or authorities.” |
+| Financial request | A suspicious demand for cash or financial details |
+| Courier pickup | Someone collecting the demanded cash |
 
-Default `WARNING_THRESHOLD=50` controls spoken cautions independently of email tiers.
-Gemini may return no warning text, even at high scores; this never triggers TTS.
-Eligible text must be one of three short caution phrases defined in `risk.py`, preventing
-caller-injected instructions from being spoken. Each reached warning tier is attempted
-at most once per session; failed/cancelled warnings are not repeatedly synthesized.
+The calculated total uses caution at 50, high at 75 and critical at 90. Independently,
+Gemini's scam judgment raises a high warning even when the six scores are low. A local
+number match also raises a high warning without changing or inventing conversation
+scores. The whole scoring panel turns orange for caution and red for high/critical;
+it states the reason for the flag separately from the additive total. A listed number
+may be stale or spoofed, and neither a low score nor a missing match establishes safety.
+
+Default `WARNING_THRESHOLD=50` gates spoken cautions based on scores; `is_scam=true`
+bypasses that threshold. **Score-only assessments never synthesize speech**: warning
+text must still be one of three allowlisted caution phrases in `risk.py`. Gemini is
+instructed to supply one when it judges the conversation a scam, even at low scores.
+A number-only warning is visual and can alert a configured guardian during screening;
+checking a number before screening does not send email or synthesize speech. Each
+reached spoken-warning tier is attempted at most once per session; failed/cancelled
+warnings are not repeatedly synthesized.
 **Stop warning audio** cancels playback. Echo cancellation plus bounded silence forwarding
 in the browser/backend prevents warning audio from feeding back into the classifier.
 Speech overlapping a warning can be missed; real speakerphone acoustic testing is still
@@ -96,10 +106,15 @@ international prefix for other countries or configure the default ISO region.
 
 The existing [dataset and provenance](data/scam_numbers/README.md) are preserved and
 queried locally with read-only, parameterized SQLite. The wheel includes the database;
-`SCAM_DB_PATH` can explicitly override its location. UI states distinguish omitted,
-invalid, matched, no match and unavailable. A match includes source/import time and
+`SCAM_DB_PATH` can explicitly override its location. The **Check number** action works without microphone access or provider credentials.
+Exact stored matches still warn when legacy entries have unusual phone-number lengths;
+unmatched invalid numbers remain invalid. Starting a screening session repeats the lookup and sends its result before opening
+Gradium, so provider delays or errors cannot hide a listed-number warning. UI states
+distinguish omitted, invalid, matched, no match and unavailable. A match includes source/import time and
 may be stale; caller ID can be spoofed. No match is **not** proof of safety. Lookup
-status is explicit Gemini context, with no automatic numerical score bonus.
+status is explicit Gemini context, with no automatic numerical score bonus. A matched
+number independently flags the scoring panel; clearing/changing the input invalidates
+the previous lookup. Use `+` or `00` for international numbers.
 
 ## Fallback email via Resend
 
@@ -117,7 +132,8 @@ invalid configuration is clearly marked and does not prevent screening. Once con
 starting the listener enables automatic runtime alerts; the browser cannot supply a
 recipient, sender or arbitrary email body.
 
-A first crossing of 50 sends a caution; reaching 75 or 90 escalates. A direct jump to
+A first crossing of 50 sends a caution; reaching 75 or 90 escalates. A Gemini scam
+judgment or a matched number during screening independently qualifies for tier 75. A direct jump to
 90 sends one critical alert. Repeated scores and falling/rising jitter do not resend
 previous tiers. Pending unsent escalations coalesce to the highest. Attempted and
 API-accepted tiers are tracked separately in session memory. Transport failures, 429
@@ -126,8 +142,11 @@ and exact payload; a newer pending tier supersedes the retry. Authentication/val
 failures are not retried. No repeated retry on each transcript. New sessions have new
 identities, so they may alert again; restarting is not a delivery recovery mechanism.
 
-Emails contain severity, UTC time, caller context and criterion scores, without raw
-transcripts. “Accepted by Resend” is not verified inbox delivery. No delivery webhook
+Emails contain severity, UTC time, caller context and available criterion scores,
+without raw transcripts. A number-only alert explicitly says scores are not yet available.
+Only a successful Resend response displays **Guardian alerted at [time] — [alert level]**
+in the frontend. The banner also explains that this is API acceptance, not confirmed
+inbox delivery. Errors, retry attempts and missing configuration never show a success banner. “Accepted by Resend” is not verified inbox delivery. No delivery webhook
 is installed. **Development and `doctor --live` never send real email**; transport tests
 use fakes. Email credentials and a separately authorized delivery test remain needed.
 

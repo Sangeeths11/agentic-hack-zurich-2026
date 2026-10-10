@@ -43,9 +43,53 @@ async def read_start(ws: WebSocket, settings: Settings) -> CallerLookup:
         "channels": 1,
     }:
         raise ProtocolError("Expected mono 24kHz PCM16 start")
-    return await asyncio.to_thread(
+    await asyncio.wait_for(
+        ws.send_json(
+            {
+                "event": "tool",
+                "tool": "backend",
+                "status": "connected",
+                "detail": "Local audio connection established.",
+            }
+        ),
+        5,
+    )
+    await asyncio.wait_for(
+        ws.send_json(
+            {
+                "event": "tool",
+                "tool": "lookup",
+                "status": "checking",
+                "detail": "Checking the supplied number against the local dataset.",
+            }
+        ),
+        5,
+    )
+    caller = await asyncio.to_thread(
         lookup_caller, number, settings.caller_default_region, settings.scam_db_path
     )
+    # Publish local evidence before opening a cloud provider: a listed number
+    # remains visible even when STT is slow or unavailable.
+    await asyncio.wait_for(ws.send_json({"event": "caller_lookup", "caller": caller.public()}), 5)
+    details = {
+        "not_provided": "No caller number provided; database lookup skipped.",
+        "invalid": "Invalid caller number; database lookup skipped.",
+        "unavailable": "Number database unavailable; caller risk is unknown.",
+        "no_match": "No match in the local dataset; this does not establish safety.",
+        "matched": "Warning: the supplied number is listed in the suspicious-number dataset.",
+    }
+    await asyncio.wait_for(
+        ws.send_json(
+            {
+                "event": "tool",
+                "tool": "lookup",
+                "status": caller.status,
+                "detail": details[caller.status],
+            }
+        ),
+        5,
+    )
+    return caller
 
 
 async def relay(
@@ -129,6 +173,17 @@ async def relay(
 
     async def run_provider() -> None:
         nonlocal session
+        await asyncio.wait_for(
+            ws.send_json(
+                {
+                    "event": "tool",
+                    "tool": "stt",
+                    "status": "connecting",
+                    "detail": "Opening the Gradium transcription connection.",
+                }
+            ),
+            5,
+        )
         session = await asyncio.wait_for(
             factory.open(caller, session_id), settings.session_start_timeout_seconds
         )

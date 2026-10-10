@@ -22,8 +22,19 @@ def connect(client):
 
 def start(ws):
     ws.send_json(start_message())
+    assert ws.receive_json()["tool"] == "backend"
+    assert ws.receive_json()["status"] == "checking"
+    assert ws.receive_json()["event"] == "caller_lookup"
+    assert ws.receive_json()["status"] == "not_provided"
+    assert ws.receive_json()["status"] == "connecting"
     assert ws.receive_json()["event"] == "ready"
     assert ws.receive_json()["tool"] == "stt"
+
+
+def receive_close(ws):
+    while "code" not in (event := ws.receive()):
+        assert event.get("bytes") is None
+    return event
 
 
 def test_low_risk_session_no_first_audio_timeout_and_cleanup():
@@ -91,7 +102,7 @@ def test_timeouts_close_and_release_capacity(setting):
         with connect(client) as ws:
             start(ws)
             expected = 1000 if setting == "max_session_seconds" else 1011
-            assert ws.receive()["code"] == expected
+            assert receive_close(ws)["code"] == expected
     assert factory.stts[0].closed and not app.state.registry.sockets
 
 
@@ -112,7 +123,7 @@ def test_stop_during_provider_start_cancels_open():
             ws.send_json(start_message())
             time.sleep(0.02)
             ws.send_json({"event": "stop"})
-            assert ws.receive()["code"] == 1000
+            assert receive_close(ws)["code"] == 1000
     assert factory.cancelled and not app.state.registry.sockets
 
 
@@ -125,6 +136,30 @@ def test_provider_start_failure_releases_capacity():
     with TestClient(app, base_url=LOCAL_URL) as client:
         with connect(client) as ws:
             ws.send_json(start_message())
+            assert receive_close(ws)["code"] == 1011
+    assert not app.state.registry.sockets
+
+
+def test_listed_number_is_reported_before_provider_failure():
+    class BrokenFactory:
+        async def open(self, caller, session_id):
+            assert caller.status == "matched"
+            raise RuntimeError("Synthetic failure")
+
+    app = create_app(simulation_settings(), BrokenFactory())
+    with TestClient(app, base_url=LOCAL_URL) as client:
+        with connect(client) as ws:
+            ws.send_json(start_message("+1 (201) 375-9200"))
+            assert ws.receive_json()["tool"] == "backend"
+            assert ws.receive_json()["status"] == "checking"
+            result = ws.receive_json()
+            assert result["event"] == "caller_lookup"
+            assert result["caller"]["status"] == "matched"
+            assert result["caller"]["number"] == "+12013759200"
+            activity = ws.receive_json()
+            assert activity["tool"] == "lookup" and activity["status"] == "matched"
+            assert "Warning" in activity["detail"]
+            assert ws.receive_json()["status"] == "connecting"
             assert ws.receive()["code"] == 1011
     assert not app.state.registry.sockets
 
@@ -149,7 +184,7 @@ def test_inbound_audio_queue_is_bounded_during_slow_start():
             ws.send_json(start_message())
             for _ in range(130):
                 ws.send_bytes(microphone_audio())
-            assert ws.receive()["code"] == 1008
+            assert receive_close(ws)["code"] == 1008
     assert not app.state.registry.sockets
 
 

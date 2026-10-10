@@ -1,3 +1,5 @@
+import json
+
 import pytest
 from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
@@ -93,7 +95,8 @@ def test_same_origin_localhost_and_loopback_work():
                 url.replace("http:", "ws:") + "/audio/stream", headers={"origin": url}
             ) as ws:
                 ws.send_json(start_message())
-                assert ws.receive_json()["event"] == "ready"
+                while ws.receive_json()["event"] != "ready":
+                    pass
 
 
 def test_email_recipient_is_local_configuration_not_a_browser_relay():
@@ -121,3 +124,104 @@ def test_websocket_query_parameters_are_rejected():
                 "ws://localhost:8082/audio/stream?recipient=x", headers=LOCAL_HEADERS
             ):
                 pass
+
+
+@pytest.mark.parametrize(
+    ("number", "normalized"),
+    [
+        ("+12013759200", "+12013759200"),
+        ("+1 (201) 375-9200", "+12013759200"),
+        ("001 201 375 9200", "+12013759200"),
+        ("+22375888", "+22375888"),
+        ("+555123456", "+555123456"),
+    ],
+)
+def test_caller_lookup_warns_for_preserved_database_number_without_cloud_keys(
+    number, normalized, caplog
+):
+    factory = DemoFactory()
+    with TestClient(create_app(Settings(_env_file=None), factory), base_url=LOCAL_URL) as client:
+        response = client.post(
+            "/api/caller-lookup", json={"caller_number": number}, headers=LOCAL_HEADERS
+        )
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "no-store"
+    caller = response.json()["caller"]
+    assert caller["status"] == "matched"
+    assert caller["number"] == normalized
+    assert caller["source"] == "shalom_karr_ai_blocklist"
+    assert caller["listed_at"]
+    assert number not in caplog.text
+    assert not factory.sessions
+
+
+@pytest.mark.parametrize(
+    ("number", "expected"),
+    [("", "not_provided"), ("not a number", "invalid"), ("079 999 99 99", "no_match")],
+)
+def test_caller_lookup_preserves_unknown_states(number, expected):
+    with TestClient(create_app(Settings(_env_file=None)), base_url=LOCAL_URL) as client:
+        response = client.post(
+            "/api/caller-lookup", json={"caller_number": number}, headers=LOCAL_HEADERS
+        )
+    assert response.json()["caller"]["status"] == expected
+    if expected == "no_match":
+        assert response.json()["caller"]["number"] == "+41799999999"
+
+
+def test_caller_lookup_reports_unavailable_database(tmp_path):
+    settings = Settings(_env_file=None, scam_db_path=tmp_path / "missing.db")
+    with TestClient(create_app(settings), base_url=LOCAL_URL) as client:
+        response = client.post(
+            "/api/caller-lookup",
+            json={"caller_number": "+12013759200"},
+            headers=LOCAL_HEADERS,
+        )
+    assert response.json()["caller"]["status"] == "unavailable"
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        None,
+        [],
+        {},
+        {"caller_number": 123},
+        {"caller_number": "1" * 65},
+        {"caller_number": "", "extra": True},
+    ],
+)
+def test_caller_lookup_rejects_invalid_payload(payload):
+    with TestClient(create_app(Settings(_env_file=None)), base_url=LOCAL_URL) as client:
+        response = client.post(
+            "/api/caller-lookup",
+            content=json.dumps(payload),
+            headers={**LOCAL_HEADERS, "content-type": "application/json"},
+        )
+    assert response.status_code == 422
+    assert response.headers["cache-control"] == "no-store"
+
+
+def test_caller_lookup_bounds_body_and_rejects_foreign_origin():
+    with TestClient(create_app(Settings(_env_file=None)), base_url=LOCAL_URL) as client:
+        assert (
+            client.post(
+                "/api/caller-lookup", json={"caller_number": "1" * 2000}, headers=LOCAL_HEADERS
+            ).status_code
+            == 413
+        )
+        for origin in [None, "https://evil.example", "http://localhost:8082/path"]:
+            assert (
+                client.post(
+                    "/api/caller-lookup",
+                    json={"caller_number": "+12013759200"},
+                    headers={"origin": origin} if origin else {},
+                ).status_code
+                == 403
+            )
+        assert (
+            client.post(
+                "/api/caller-lookup", data={"caller_number": "+12013759200"}, headers=LOCAL_HEADERS
+            ).status_code
+            == 415
+        )

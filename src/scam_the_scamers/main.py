@@ -1,17 +1,20 @@
 """Local listener UI and same-origin browser audio WebSocket."""
 
+import asyncio
+import json
 import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from fastapi import FastAPI, WebSocket
+from fastapi import FastAPI, Request, WebSocket
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from .agent import AgentFactory, ScreeningFactory
 from .bridge import SessionRegistry, handle_stream
+from .caller import lookup_caller
 from .config import Settings
 
 STATIC = Path(__file__).with_name("static")
@@ -77,6 +80,53 @@ def create_app(settings: Settings | None = None, factory: AgentFactory | None = 
             },
             headers={"Cache-Control": "no-store"},
         )
+
+    @app.post("/api/caller-lookup")
+    async def caller_lookup(request: Request):
+        # Keep entered phone numbers out of URLs/access logs. The local lookup
+        # works without microphone access or cloud-provider configuration.
+        headers = {"Cache-Control": "no-store"}
+        origin = urlsplit(request.headers.get("origin", ""))
+        if (
+            request.url.query
+            or origin.scheme != "http"
+            or origin.netloc != request.headers.get("host")
+            or origin.path
+            or origin.query
+            or origin.fragment
+        ):
+            return JSONResponse({"detail": "Same-origin request required."}, 403, headers=headers)
+        if request.headers.get("content-type", "").split(";", 1)[0].strip() != "application/json":
+            return JSONResponse({"detail": "JSON request required."}, 415, headers=headers)
+        raw = bytearray()
+        try:
+            async with asyncio.timeout(5):
+                async for chunk in request.stream():
+                    if len(raw) + len(chunk) > 1024:
+                        return JSONResponse(
+                            {"detail": "Lookup request too large."}, 413, headers=headers
+                        )
+                    raw.extend(chunk)
+        except TimeoutError:
+            return JSONResponse({"detail": "Lookup request timed out."}, 408, headers=headers)
+        try:
+            payload = json.loads(raw)
+        except (ValueError, UnicodeDecodeError):
+            return JSONResponse({"detail": "Invalid lookup request."}, 422, headers=headers)
+        if (
+            not isinstance(payload, dict)
+            or set(payload) != {"caller_number"}
+            or not isinstance(payload["caller_number"], str)
+            or len(payload["caller_number"]) > 64
+        ):
+            return JSONResponse({"detail": "Invalid caller number."}, 422, headers=headers)
+        caller = await asyncio.to_thread(
+            lookup_caller,
+            payload["caller_number"],
+            settings.caller_default_region,
+            settings.scam_db_path,
+        )
+        return JSONResponse({"caller": caller.public()}, headers=headers)
 
     @app.websocket("/audio/stream")
     async def stream(ws: WebSocket):

@@ -55,6 +55,10 @@
           </button>
         </div>
       </div>
+      <aside id="guardian-banner" class="guardian-banner" role="status" hidden>
+        <strong id="guardian-message"></strong>
+        <p>Accepted by the email provider. Inbox delivery is unverified.</p>
+      </aside>
       <div id="workspace" class="workspace" data-view="split">
         <div id="listener-panel" aria-label="Listener workspace">
           <div class="panel-heading">
@@ -82,9 +86,10 @@
             </div>
             <div class="call-settings">
               <label for="caller-number">Caller number <span>(optional)</span></label>
-              <input id="caller-number" type="tel" maxlength="64" autocomplete="off"
-                placeholder="+41 79 123 45 67" aria-describedby="caller-help" />
+              <div class="number-input"><input id="caller-number" type="tel" maxlength="64" autocomplete="off"
+                placeholder="+41 79 123 45 67" aria-describedby="caller-help" /><button id="check-number" type="button">Check number</button></div>
               <p id="caller-help">Enter an international number, or a Swiss local number. The microphone cannot detect caller ID.</p>
+              <p id="caller-check-status" class="caller-check-status" role="status" hidden></p>
               <p id="fallback-status" role="status">Checking fallback email configuration…</p>
               <p class="provider-note">During screening, Gradium transcribes audio and Gemini assesses the text. Configured fallback alerts send a risk summary via Resend.</p>
             </div>
@@ -151,45 +156,51 @@
               >
             </div>
             <section id="risk-panel" class="risk-panel" data-risk="unavailable" aria-label="Live risk scores">
-              <div class="risk-heading"><div><span>CALCULATED OVERALL RISK</span>
+              <div class="risk-heading"><div><span>CALCULATED ADDITIVE TOTAL</span>
                 <strong id="overall-score">—</strong></div><span id="risk-level">Waiting</span></div>
+              <p id="risk-warning" class="risk-warning" role="alert" hidden></p>
               <p id="assessment-status" role="status">Waiting for speech and a valid assessment.</p>
               <p class="rubric-note">All six Gemini evidence scores</p>
               <div id="criteria-scores"></div>
-              <p class="rubric-note">Evidence indicators, not a probability or proof of fraud. A family claim alone contributes at most 5 points.</p>
+              <p class="rubric-note">Evidence indicators, not a probability or proof of fraud. A scam judgment or listed number can flag the call independently of the total.</p>
               <details><summary>How scores work</summary>
-                <p>Gemini returns the six criterion scores below. The server calculates the overall weighted sum, rounded to one decimal. Each criterion: 0 absent, 25 ambiguous, 50 plausible, 75 strong, 100 explicit evidence. Overall weights: family 5%, distress 10%, urgency 20%, secrecy 20%, financial request 25%, courier 20%. Below 50 green; 50 caution (amber); 75 high (red); 90 critical. Mistakes are possible. Verify independently.</p>
+                <p>Gemini assesses six criteria against the accumulated conversation. Each score: 0 absent, 25 ambiguous, 50 plausible, 75 strong, 100 explicit evidence. The server adds all six scores, caps the total at 100 and rounds to one decimal. Alerts start at 50 (caution), 75 (high) and 90 (critical). Gemini's scam judgment and a suspicious-number match can raise the alert level independently. Mistakes are possible. Verify independently.</p>
               </details>
             </section>
-            <div class="pipeline" aria-label="Current audio status">
-              <div id="microphone-stage" data-active="false">
-                <span class="stage-number">01</span>
-                <h3>Microphone</h3>
-                <p id="microphone-status">Off</p>
+            <section class="tools-section" aria-labelledby="graph-title">
+              <div class="section-heading"><h3 id="graph-title">Screening flow</h3><span class="graph-legend"><i></i> Active now</span></div>
+              <p class="graph-description">Audio → transcript → assessment → response. Highlights follow actual activity.</p>
+              <div class="flow-graph" aria-label="Live tool graph">
+                <svg class="flow-lines" viewBox="0 0 600 360" preserveAspectRatio="none" aria-hidden="true">
+                  <defs><marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" /></marker></defs>
+                  <path d="M 178 52 H 218" data-to="backend" />
+                  <path d="M 378 52 H 418" data-to="lookup" />
+                  <path d="M 300 92 V 112 H 100 V 136" data-to="stt" />
+                  <path d="M 178 180 H 218" data-to="gemini" />
+                  <path d="M 378 180 H 418" data-to="scoring" />
+                  <path d="M 500 224 V 246 H 100 V 264" data-to="tts" />
+                  <path d="M 500 224 V 264" data-to="resend" />
+                  <path d="M 178 308 H 218" data-to="speaker" />
+                </svg>
+                <div id="microphone-stage" class="flow-node" data-active="false"><span class="node-kind">BROWSER</span><h3>Microphone</h3><p id="microphone-status">Off</p></div>
+                <div id="agent-stage" class="flow-node" data-active="false"><span class="node-kind">LOCAL SERVER</span><h3>Backend</h3><p id="agent-status">Disconnected</p></div>
+                <div id="node-lookup" class="flow-node" data-active="false"><span class="node-kind">LOCAL SQLITE</span><h3>Number lookup</h3><p id="tool-db">Not checked</p></div>
+                <div id="node-stt" class="flow-node" data-active="false"><span class="node-kind">GRADIUM API</span><h3>Speech to text</h3><p id="tool-stt">Idle</p></div>
+                <div id="node-gemini" class="flow-node" data-active="false"><span class="node-kind">GEMINI API</span><h3>Assess context</h3><p id="tool-gemini">Waiting for speech</p></div>
+                <div id="node-scoring" class="flow-node" data-active="false"><span class="node-kind">LOCAL SERVER</span><h3>Add scores</h3><p id="tool-scoring">Waiting for assessment</p></div>
+                <div id="node-tts" class="flow-node" data-active="false"><span class="node-kind">GRADIUM API</span><h3>Warning voice</h3><p id="tool-tts">No warning requested</p></div>
+                <div id="speaker-stage" class="flow-node" data-active="false"><span class="node-kind">BROWSER</span><h3>Speaker</h3><p id="speaker-status">Quiet</p></div>
+                <div id="node-resend" class="flow-node" data-active="false"><span class="node-kind">RESEND API</span><h3>Guardian email</h3><p id="tool-resend">Checking configuration</p></div>
               </div>
-              <div id="agent-stage" data-active="false">
-                <span class="stage-number">02</span>
-                <h3>Screening</h3>
-                <p id="agent-status">Disconnected</p>
-              </div>
-              <div id="speaker-stage" data-active="false">
-                <span class="stage-number">03</span>
-                <h3>Speaker</h3>
-                <p id="speaker-status">Quiet</p>
-              </div>
-            </div>
-            <div class="tools-section">
-              <div class="section-heading"><h3>Provider &amp; tool status</h3></div>
-              <dl class="tool-statuses">
-                <div><dt>Gradium STT</dt><dd id="tool-stt">Idle</dd></div>
-                <div><dt>Gemini</dt><dd id="tool-gemini">Waiting for transcript</dd></div>
-                <div><dt>Number database</dt><dd id="tool-db">Not checked</dd></div>
-                <div><dt>Gradium TTS</dt><dd id="tool-tts">No warning requested</dd></div>
-                <div><dt>Resend email</dt><dd id="tool-resend">Checking configuration</dd></div>
-              </dl>
               <p id="caller-result" class="rubric-note">No number checked. A missing match never proves safety.</p>
               <p id="warning-text" role="status" hidden></p>
-            </div>
+            </section>
+            <section class="transcript-section" aria-labelledby="transcript-title">
+              <div class="section-heading"><h3 id="transcript-title">Live transcript</h3><span id="transcript-state" class="count-badge">Waiting</span></div>
+              <p id="transcript-empty" class="transcript-empty">Speech will appear here when Gradium transcribes it.</p>
+              <div id="transcript-text" class="transcript-text" tabindex="0" aria-label="Current conversation transcript" hidden></div>
+              <p id="transcript-note" class="rubric-note">Kept in memory for this session. Cleared when screening ends.</p>
+            </section>
             <div class="activity-section">
               <div class="section-heading">
                 <h3>Live activity</h3>

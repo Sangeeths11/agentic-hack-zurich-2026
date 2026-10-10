@@ -11,6 +11,7 @@ from pathlib import Path
 
 import uvicorn
 from playwright.async_api import async_playwright
+from pydantic import SecretStr
 from support import DemoFactory, assessment, simulation_settings
 
 from scam_the_scamers.main import create_app
@@ -91,12 +92,31 @@ async def main():
                 assert "not configured" in await page.locator("#fallback-status").inner_text()
                 assert await page.locator("#overall-score").inner_text() == "—"
                 await page.locator("#caller-number").fill("+12013759200")
+                await page.get_by_role("button", name="Check number", exact=True).click()
+                await wait_browser(
+                    page, "document.querySelector('#tool-db').textContent === 'matched'"
+                )
+                assert await page.locator("#risk-panel").get_attribute("data-risk") == "red"
+                assert "Listed number" in await page.locator("#risk-warning").inner_text()
+                assert "Listed number" in await page.locator("#caller-check-status").inner_text()
+                assert (
+                    "shalom_karr_ai_blocklist" in await page.locator("#caller-result").inner_text()
+                )
+                assert await page.locator("#overall-score").inner_text() == "—"
+                assert not factory.sessions and not factory.email.calls
+                await page.locator("#caller-number").fill("")
+                assert await page.locator("#risk-panel").get_attribute("data-risk") == "unavailable"
                 await page.screenshot(path=str(artifacts / "listener-desktop.png"), full_page=True)
+                factory.classifier.delay = 0.4
                 await page.get_by_role("button", name="Enable listener").click()
                 await wait_browser(page, "document.querySelector('#orb').dataset.state === 'armed'")
                 await page.wait_for_timeout(500)
                 assert not factory.sessions, "Silence must never open a provider session"
                 await page.evaluate("testAudio.gain.gain.value = 0.12")
+                await wait_browser(
+                    page, "document.querySelector('#node-gemini').dataset.active === 'true'"
+                )
+                assert await page.locator("#node-stt").get_attribute("data-active") == "true"
                 await wait_browser(
                     page, "document.querySelector('#overall-score').textContent === '49 / 100'"
                 )
@@ -104,11 +124,30 @@ async def main():
                 assert await page.evaluate("testAudio.starts === 0"), "Low risk must not play audio"
                 assert not factory.speech.calls and not factory.email.calls
                 assert await page.locator("#risk-panel").get_attribute("data-risk") == "green"
-                assert await page.locator("#tool-db").inner_text() == "matched"
+                assert await page.locator("#tool-db").inner_text() == "not provided"
+                assert await page.locator("#node-gemini").get_attribute("data-active") == "false"
+                assert await page.locator("#tool-scoring").inner_text() == "complete"
                 assert (
-                    "shalom_karr_ai_blocklist" in await page.locator("#caller-result").inner_text()
+                    "Synthetic family emergency"
+                    in await page.locator("#transcript-text").inner_text()
                 )
                 assert await page.locator("#criteria-scores .criterion").count() == 6
+                factory.classifier.delay = 0
+
+                # A low additive total must not hide Gemini's independent scam judgment.
+                factory.classifier.result = assessment(10, is_scam=True)
+                await factory.stts[0].events.put(
+                    TranscriptEvent("text", '<img src=x onerror="alert(1)">')
+                )
+                await wait_browser(
+                    page, "document.querySelector('#overall-score').textContent === '10 / 100'"
+                )
+                assert await page.locator("#risk-panel").get_attribute("data-risk") == "red"
+                assert "Gemini flagged" in await page.locator("#risk-warning").inner_text()
+                assert "<img src=x" in await page.locator("#transcript-text").inner_text()
+                assert await page.locator("#transcript-text img").count() == 0
+                assert not factory.speech.calls, "Score-only assessments must not request TTS"
+                assert not await page.locator("#guardian-banner").is_visible()
 
                 # Exercise exact displayed thresholds through the real backend pipeline.
                 for score, color in [(50, "amber"), (75, "red"), (90, "critical")]:
@@ -122,7 +161,8 @@ async def main():
                     )
                     assert await page.locator("#risk-panel").get_attribute("data-risk") == color
                     assert (
-                        await page.locator("#criterion-secrecy").get_attribute("data-risk") == color
+                        await page.locator("#criterion-secrecy").get_attribute("data-risk")
+                        == "green"
                     )
                 await wait_browser(page, "testAudio.starts > 0")
                 before_calls = len(factory.classifier.calls)
@@ -174,6 +214,8 @@ async def main():
                 assert not await page.locator("#tools-panel").is_visible()
                 await page.get_by_role("button", name="End screening").click()
                 await wait_browser(page, "document.querySelector('#orb').dataset.state === 'armed'")
+                assert await page.locator("#transcript-text").inner_text() == ""
+                assert await page.locator("#node-stt").get_attribute("data-active") == "false"
                 assert "Ended by you" in await page.locator("#activity-log").inner_text()
                 await page.get_by_role("button", name="Pause listener").click()
                 await wait_browser(page, "document.querySelector('#orb').dataset.state === 'off'")
@@ -193,6 +235,14 @@ async def main():
                 )
 
                 factory.classifier.result = assessment(20)
+                # A fake accepted provider response, never a real email, exercises the banner.
+                settings.resend_api_key = SecretStr("offline")
+                settings.alert_from_email = SecretStr("alerts@example.org")
+                settings.fallback_email = SecretStr("guardian@example.org")
+                await page.reload()
+                await wait_browser(page, "!document.querySelector('#toggle').disabled")
+                await page.get_by_role("button", name="Listener", exact=True).click()
+                await page.locator("#caller-number").fill("+12013759200")
                 # Restart and verify the automatic idle return, with a real worklet clock.
                 await page.get_by_role("button", name="Enable listener").click()
                 await wait_browser(page, "document.querySelector('#orb').dataset.state === 'armed'")
@@ -200,6 +250,34 @@ async def main():
                 await wait_browser(
                     page, "document.querySelector('#overall-score').textContent === '20 / 100'"
                 )
+                await wait_browser(page, "!document.querySelector('#guardian-banner').hidden")
+                assert await page.locator("#risk-panel").get_attribute("data-risk") == "red"
+                banner = await page.locator("#guardian-message").inner_text()
+                assert banner.startswith("Guardian alerted at ") and banner.endswith(" — High")
+                assert len(factory.email.calls) == 1
+                assert "unverified" in await page.locator("#guardian-banner").inner_text()
+                assert await page.locator("#guardian-banner").is_visible()
+                await page.set_viewport_size({"width": 390, "height": 844})
+                assert await page.locator("#guardian-banner").is_visible()
+                assert await page.locator("#caller-check-status").is_visible()
+                await page.screenshot(
+                    path=str(artifacts / "listener-guardian-mobile.png"), full_page=True
+                )
+                await page.get_by_role("button", name="Tools & activity", exact=True).click()
+                assert await page.locator("#guardian-banner").is_visible()
+                assert await page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+                await page.screenshot(
+                    path=str(artifacts / "listener-flow-mobile.png"), full_page=True
+                )
+                await page.get_by_role("button", name="Listener", exact=True).click()
+                await page.set_viewport_size({"width": 1280, "height": 1080})
+                await factory.stts[-1].events.put(TranscriptEvent("text", " synthetic" * 2000))
+                await wait_browser(
+                    page,
+                    "document.querySelector('#transcript-note').textContent"
+                    ".includes('Context limit reached')",
+                )
+                assert len(await page.locator("#transcript-text").inner_text()) <= 24000
                 await page.evaluate("testAudio.gain.gain.value = 0")
                 await wait_browser(
                     page,
@@ -239,6 +317,8 @@ async def main():
                     "document.querySelector('#assessment-status').textContent.includes('unavailable')",
                 )
                 assert await page.locator("#overall-score").inner_text() == "—"
+                assert await page.locator("#risk-panel").get_attribute("data-risk") == "red"
+                assert "Listed number" in await page.locator("#risk-warning").inner_text()
                 assert await page.locator("#tool-gemini").inner_text() == "error"
                 await page.get_by_role("button", name="Pause listener").click()
                 await asyncio.sleep(0.1)
@@ -283,6 +363,14 @@ async def main():
                     page, "document.querySelector('#error').textContent.includes('Finish setup')"
                 )
                 assert await page.locator("#toggle").is_disabled()
+                # Local lookup is useful even before provider keys are configured.
+                await page.locator("#caller-number").fill("+12013759200")
+                await page.get_by_role("button", name="Check number", exact=True).click()
+                await wait_browser(
+                    page,
+                    "document.querySelector('#caller-check-status').dataset.matched === 'true'",
+                )
+                assert await page.locator("#caller-check-status").is_visible()
                 assert not errors, errors
                 print(
                     json.dumps(

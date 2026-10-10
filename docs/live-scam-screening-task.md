@@ -146,3 +146,28 @@ and refresh Brain with `--agent none --raw` on the clean committed checkout.
 After verification, confirm the old project server on port 8082 has no active call,
 gracefully restart only that server with the updated backend, verify health/config
 and leave the local demo ready. No real microphone activation or email sending.
+
+
+## Additive scoring and live UI follow-up (2026-10-10)
+
+The latest user work order supersedes the earlier weighted aggregate and score-only
+warning threshold. Create `feat/live-screening-alerts` and implement:
+
+- Pre-screening local number checks and immediate listed-number warnings before
+  provider startup. Preserve the dataset, Swiss national defaults, and unknown states.
+- Add all six validated suspicious-evidence scores, capped at 100, in the backend.
+  Gemini returns an independent scam judgment that raises a high warning even below
+  the score threshold. Keep model arithmetic out of the schema. Safe warning text is
+  still required for TTS; score-only assessments remain silent.
+- Assess the accumulated conversation within the existing explicit memory bound.
+  Display that same transient context and disclose clipping.
+- Show a connected activity graph driven by actual lifecycle and provider events,
+  including local backend, SQLite, scoring and browser playback stages.
+- Color the whole scoring panel orange/red according to the independent alert level;
+  keep calculated scores distinct from flags and never fabricate missing scores.
+- Emit the guardian banner with server acceptance time and severity only after Resend
+  accepts an alert. Preserve 50/75/90 idempotency, bounded retries and visible missing
+  configuration. Tests must not send real email.
+
+The user explicitly requested sub-agents for this implementation. Existing runner
+schemas/output contracts remain intact; prompt context must match the new scoring rule.

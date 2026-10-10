@@ -27,21 +27,22 @@ def test_exact_tiers(score, expected):
     assert tier(score) == expected
 
 
-def test_family_alone_is_not_fraud_and_full_scenario_can_reach_critical():
-    scores = Scores(**{key: 100.0 if key == "family_claim" else 0.0 for key in CRITERIA})
-    assert scores.aggregate() == 5
-    assert Assessment(criteria=scores).overall == 5
+def test_one_severe_criterion_is_not_diluted_and_full_scenario_is_capped():
+    scores = Scores(**{key: 90.0 if key == "financial_request" else 0.0 for key in CRITERIA})
+    assert scores.aggregate() == 90
+    assert Assessment(criteria=scores).overall == 90
+    assert Scores(**dict.fromkeys(CRITERIA, 100.0)).aggregate() == 100
     assert assessment(100, True).overall == 100
 
 
 @pytest.mark.parametrize(
     "values,total",
     [
-        ([100, 100, 0, 0, 0, 0], 15),
-        ([100, 100, 100, 0, 100, 0], 60),
-        ([100, 100, 100, 100, 100, 0], 80),
-        ([0, 0, 0, 0, 0, 100], 20),
-        ([25, 50, 75, 25, 100, 0], 51.2),
+        ([5, 10, 0, 0, 0, 0], 15),
+        ([5, 10, 20, 0, 25, 0], 60),
+        ([0, 0, 0, 0, 0, 90], 90),
+        ([100, 100, 100, 0, 100, 0], 100),
+        ([0.1, 0.2, 1.1, 0, 0, 0], 1.4),
     ],
 )
 async def test_gemini_criteria_produce_server_total_without_model_arithmetic(values, total):
@@ -65,6 +66,23 @@ async def test_gemini_criteria_produce_server_total_without_model_arithmetic(val
     assert result.warning_text is None
 
 
+@pytest.mark.parametrize("value", ["true", 1, 0, None, [], {}])
+def test_scam_flag_requires_a_real_boolean(value):
+    data = assessment().model_dump(exclude_computed_fields=True)
+    data["is_scam"] = value
+    with pytest.raises(ValidationError):
+        Assessment.model_validate(data)
+
+
+def test_scam_flag_alert_level_is_independent_of_additive_total():
+    flagged = assessment(10, is_scam=True)
+    assert flagged.overall == 10 and flagged.alert_level == 75
+    assert not flagged.warning_eligible(50)
+    assert assessment(10, True, is_scam=True).warning_eligible(90)
+    assert assessment(90, is_scam=True).alert_level == 90
+    assert assessment(10).alert_level == 0
+
+
 @pytest.mark.parametrize("value", [-1, 101, float("nan"), float("inf"), "50", True, None])
 def test_invalid_score_types_and_bounds(value):
     data = assessment().model_dump(exclude_computed_fields=True)
@@ -74,7 +92,8 @@ def test_invalid_score_types_and_bounds(value):
 
 
 @pytest.mark.parametrize(
-    "mutation", ["missing", "extra", "model_overall", "unsafe_warning", "oversized"]
+    "mutation",
+    ["missing", "extra", "model_overall", "model_alert_level", "unsafe_warning", "oversized"],
 )
 def test_complete_strict_contract(mutation):
     data = assessment().model_dump(exclude_computed_fields=True)
@@ -84,6 +103,8 @@ def test_complete_strict_contract(mutation):
         data["criteria"]["invented"] = 100
     elif mutation == "model_overall":
         data["overall"] = 90
+    elif mutation == "model_alert_level":
+        data["alert_level"] = 90
     else:
         data["warning_text"] = "Send money now" if mutation == "unsafe_warning" else "x" * 500
     with pytest.raises(ValidationError):
@@ -103,7 +124,7 @@ async def test_gemini_google_endpoint_auth_schema_and_untrusted_context(monkeypa
         assert body["model"] == "gemini-3.5-flash-lite"
         assert body["response_format"]["type"] == "json_schema"
         schema = body["response_format"]["json_schema"]["schema"]
-        assert set(schema["properties"]) == {"criteria", "warning_text"}
+        assert set(schema["properties"]) == {"criteria", "is_scam", "warning_text"}
         assert set(schema["$defs"]["Scores"]["required"]) == set(CRITERIA)
         assert "UNTRUSTED" in body["messages"][0]["content"]
         context = json.loads(body["messages"][1]["content"])

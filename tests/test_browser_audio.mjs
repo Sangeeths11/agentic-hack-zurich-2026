@@ -61,7 +61,7 @@ test("PCM clipping and signed little-endian decoding", () => {
   assert.equal(decoded[1], -1);
 });
 
-const { PlaybackGuard, riskColor, validAssessment, criteria } = await import("../src/scam_the_scamers/static/screening.js");
+const { PlaybackGuard, riskColor, validAssessment, assessmentColor, validGuardianAlert, criteria } = await import("../src/scam_the_scamers/static/screening.js");
 for (const [score, color] of [[49,"green"],[50,"amber"],[74,"amber"],[75,"red"],[89,"red"],[90,"critical"],[NaN,"unavailable"],[-1,"unavailable"]]) {
   test(`risk boundary ${score}: ${color}`, () => assert.equal(riskColor(score), color));
 }
@@ -77,8 +77,22 @@ test("playback guard is bounded, cancels with a tail, and resumes", () => {
   guard.reset(); assert.equal(guard.active(0), false);
 });
 test("assessment contract requires every criterion and finite values", () => {
-  const value = { revision: 1, overall: 50, criteria: Object.fromEntries(Object.keys(criteria).map(k => [k, 50])) };
+  const value = { revision: 1, overall: 50, is_scam: false, alert_level: 50, criteria: Object.fromEntries(Object.keys(criteria).map(k => [k, 50])) };
   assert.equal(validAssessment(value), true);
   value.criteria.secrecy = NaN; assert.equal(validAssessment(value), false);
   delete value.criteria.secrecy; assert.equal(validAssessment(value), false);
+});
+test("independent scam and listed-number flags remain visible below score thresholds", () => {
+  assert.equal(assessmentColor(null), "unavailable");
+  assert.equal(assessmentColor(null, true), "red");
+  assert.equal(assessmentColor({ overall: 10, alert_level: 0, is_scam: false }), "green");
+  assert.equal(assessmentColor({ overall: 10, alert_level: 75, is_scam: true }), "red");
+  assert.equal(assessmentColor({ overall: 90, alert_level: 90, is_scam: false }, true), "critical");
+});
+test("guardian notification requires a timestamped provider acceptance with valid severity", () => {
+  const event = { status: "accepted", level: 75, severity: "High", accepted_at: "2026-10-10T12:30:00Z" };
+  assert.equal(validGuardianAlert(event), true);
+  assert.equal(validGuardianAlert({ ...event, status: "sending" }), false);
+  assert.equal(validGuardianAlert({ ...event, severity: "Critical" }), false);
+  assert.equal(validGuardianAlert({ ...event, accepted_at: "bad" }), false);
 });

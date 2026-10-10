@@ -72,3 +72,21 @@ def test_screening_lookup_states_and_swiss_normalization(tmp_path):
     invalid_db = tmp_path / "broken.db"
     invalid_db.write_text("not sqlite")
     assert lookup_caller("+12013759200", db_path=invalid_db).status == "unavailable"
+
+
+def test_screening_preserves_exact_matches_for_legacy_short_database_numbers(tmp_path):
+    from scam_the_scamers.caller import lookup_caller
+
+    for number in ("+22375888", "+555123456"):
+        caller = lookup_caller(number)
+        assert caller.status == "matched"
+        assert caller.number == number
+        assert caller.source == "shalom_karr_ai_blocklist"
+        assert lookup_caller(number, db_path=tmp_path / "missing.db").status == "unavailable"
+
+
+def test_screening_rejects_unlisted_short_numbers_extensions_and_excessive_length():
+    from scam_the_scamers.caller import lookup_caller
+
+    for number in ("+22375887", "+555123455", "+12013759200 ext. 123", "+1" + "2" * 64):
+        assert lookup_caller(number).status == "invalid"

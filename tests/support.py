@@ -25,9 +25,10 @@ def simulation_settings(**overrides) -> Settings:
     return Settings(_env_file=None, **values)
 
 
-def assessment(score=20, warning=False) -> Assessment:
+def assessment(score=20, warning=False, *, is_scam=False) -> Assessment:
     return Assessment(
-        criteria=Scores(**dict.fromkeys(CRITERIA, float(score))),
+        criteria=Scores(**dict.fromkeys(CRITERIA, float(score) / len(CRITERIA))),
+        is_scam=is_scam,
         warning_text=WARNINGS[0] if warning else None,
     )
 

@@ -20,7 +20,7 @@ from .providers import (
     Speech,
     STTSession,
 )
-from .risk import Assessment, tier
+from .risk import Assessment
 
 
 @dataclass(frozen=True)
@@ -83,7 +83,7 @@ class ScreeningSession:
         self.suppressed_until = 0.0
         self.warning_generation = 0
         self.warning_queue: asyncio.Queue[Assessment] = asyncio.Queue(maxsize=1)
-        self.alerts = AlertManager(settings, email, session_id, self.activity)
+        self.alerts = AlertManager(settings, email, session_id, self.activity, notify=self.notify)
         self.closed = False
         self.tasks = [
             asyncio.create_task(self._guard(coro))
@@ -106,6 +106,9 @@ class ScreeningSession:
             AgentEvent({"event": "tool", "tool": tool, "status": status, "detail": detail})
         )
 
+    async def notify(self, payload: dict) -> None:
+        await self.events.put(AgentEvent(payload))
+
     async def send_audio(self, audio: bytes) -> None:
         # Keep the clock moving with silence during warnings; never replay buffered echo.
         if time.monotonic() < self.suppressed_until:
@@ -122,15 +125,25 @@ class ScreeningSession:
         await self.activity(
             "stt", "streaming", "Gradium STT connected; streaming microphone audio."
         )
+        await self.alerts.consider_caller(self.caller)
         while True:
             event = await asyncio.wait_for(
                 self.stt.receive(), self.settings.provider_idle_timeout_seconds
             )
             if event is None:
+                await self.activity("stt", "complete", "Gradium STT finished transcribing.")
                 self.stt_done.set()
                 return
             if event.kind == "text" and self.transcript.append(event.text):
                 self.revision += 1
+                await self.notify(
+                    {
+                        "event": "transcript",
+                        "revision": self.revision,
+                        "text": self.transcript.text,
+                        "context_truncated": self.transcript.truncated,
+                    }
+                )
                 self.assessed.clear()
                 self.changed.set()
             # end_text closes a segment; it is not another text chunk. flushed is an
@@ -148,6 +161,7 @@ class ScreeningSession:
                 await asyncio.sleep(delay)
             self.changed.clear()
             revision, text = self.revision, self.transcript.text
+            context_truncated = self.transcript.truncated
             last_started = time.monotonic()
             await self.activity("gemini", "assessing", "Assessing accumulated call context.")
             try:
@@ -164,18 +178,23 @@ class ScreeningSession:
             else:
                 # One classifier request at a time; revisions can never arrive out of order.
                 self.latest = assessment
+                await self.activity(
+                    "gemini", "complete", "Six criteria and scam judgment received."
+                )
+                await self.activity("scoring", "calculating", "Adding the six validated criteria.")
+                result = assessment.model_dump()
                 await self.events.put(
                     AgentEvent(
                         {
                             "event": "assessment",
                             "revision": revision,
-                            **assessment.model_dump(),
-                            "context_truncated": self.transcript.truncated,
+                            **result,
+                            "context_truncated": context_truncated,
                         }
                     )
                 )
                 await self.activity(
-                    "gemini", "complete", "Six criteria assessed; screening indicator updated."
+                    "scoring", "complete", "Additive total and alert level calculated locally."
                 )
                 await self.alerts.consider(assessment, self.caller)
                 if self.warning_queue.full():
@@ -190,10 +209,9 @@ class ScreeningSession:
         while True:
             assessment = await self.warning_queue.get()
             try:
-                level = max(1, tier(assessment.overall))
+                level = max(1, assessment.alert_level)
                 if (
-                    not assessment.warning_text
-                    or assessment.overall < self.settings.warning_threshold
+                    not assessment.warning_eligible(self.settings.warning_threshold)
                     or level <= self.warning_attempted
                 ):
                     continue
@@ -204,6 +222,8 @@ class ScreeningSession:
                 )
                 try:
                     async with asyncio.timeout(self.settings.request_timeout_seconds):
+                        # warning_eligible guarantees a nonempty allowlisted phrase.
+                        assert assessment.warning_text is not None
                         audio = await self.speech.synthesize(assessment.warning_text)
                     if not audio or len(audio) % 2 or len(audio) > 12 * 96000:
                         raise ProviderError("tts", "invalid_audio")
@@ -215,7 +235,7 @@ class ScreeningSession:
                 if (
                     generation != self.warning_generation
                     or self.latest is None
-                    or self.latest.overall < self.settings.warning_threshold
+                    or not self.latest.warning_eligible(self.settings.warning_threshold)
                 ):
                     await self.activity("tts", "cancelled", "Outdated warning discarded.")
                     continue
