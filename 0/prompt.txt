@@ -1,7 +1,3 @@
-Ergänze die README auf Englisch um die gerade gelösten Startprobleme: codex --no-daemon bei inkompatiblen Hintergrundserver-Einstellungen und die Freigabe der Entire-Hooks. Prüfe den Diff, committe und pushe auf setup/entire-hackathon. Prüfe danach mit entire checkpoint list und entire checkpoint explain HEAD, ob der Commit mit der Sitzung verknüpft wurde.
-
----
-
 Implement the complete following feature for Scam the Scamers in this repository. The user explicitly authorized executing the entire task in this already Entire-captured Terminal Codex session and having the parent Cursor agent review the result. Perform the work, validation, real commits and push, not just a plan. Do not spawn additional agents. Keep product UI, documentation, code comments and work-order text in English. You may report back to the user in German.
 
 USER'S REQUEST (complete functional scope):
