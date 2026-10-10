@@ -123,9 +123,24 @@ and [Entire quickstart](https://docs.entire.io/quickstart). Each teammate needs 
    entire doctor
    ```
 
-   Start Codex from the repository root, open `/hooks`, review and trust the
-   seven Entire hooks, then start a fresh session. Installed hooks alone do not
-   prove capture is running; verify a real checkpoint after making a change.
+   Start Codex from the repository root. If startup fails because the shared
+   background server has incompatible settings, launch it without that server:
+
+   ```bash
+   codex --no-daemon
+   ```
+
+   This runs Codex without the shared background server, even if it is already
+   running. In Codex, open `/hooks`, review and explicitly trust all seven Entire
+   hooks, then start a fresh session. Installing the hooks does not grant trust;
+   they must be approved before they can run.
+
+   Ask the agent in the fresh session to run `entire session current`. Check that
+   it resolves to its own active Codex session and shows your latest prompt.
+   This confirms session registration; verify commit linkage separately with
+   `entire checkpoint list` and `entire checkpoint explain HEAD` after committing
+   a real change. An active session with zero checkpoints does not yet prove
+   that a commit has been captured.
 4. Ask the Entire team for Trails access using the event's access form. In the
    repository's Entire **Settings → General**, enable **Runners**, **Auto build
    on push**, and **Trails**. These switches require repository admin access.
