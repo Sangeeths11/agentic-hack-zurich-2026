@@ -2,6 +2,19 @@
 
 <img src="src/scam_the_scamers/static/logo.png" alt="Scam the Scammers" width="360" />
 
+
+## Team
+
+- [Marketa Brozova](https://www.linkedin.com/in/marketa-brozova/)
+- [Simon Thor](https://www.linkedin.com/in/simon-thor/)
+- [Sangeeths Chandrakumar](https://www.linkedin.com/in/sangeeths-chandrakumar/)
+- [Joel Weiss](https://www.linkedin.com/in/weiss-joel/)
+- [Alexandre de Montleau](https://www.linkedin.com/in/alexandre-de-montleau-117b67138/)
+
+## License
+
+MIT, see [LICENSE](LICENSE).
+
 A local call-screening companion. Answer a call on your phone, turn on
 speakerphone, and place your laptop nearby. The browser microphone sends audio
 through the backend to Gradium STT. Gemini scores six warning signs; scores
@@ -510,3 +523,5 @@ For the demo, show the listener, a real captured checkpoint, its passing validat
 and the Trail's actual findings. Demonstrate a useful Graph lookup or Brain recall.
 Report measured results and clearly distinguish synthetic audio checks from a real
 phone-on-speaker test.
+
+
