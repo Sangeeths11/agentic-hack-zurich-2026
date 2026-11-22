@@ -1,4 +1,4 @@
-# Scam the Scammers
+ # Scam the Scammers
 
 Build the local laptop-microphone scam-screening pipeline. Keep the interface
 and documentation in English. Sound level triggers the agent; the app cannot
